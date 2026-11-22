@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Queue AI - Intelligent Healthcare Queue & Appointment Ecosystem</title>
+  <meta name="description" content="AI-Powered Smart Queue Management System for Hospitals and Patients with Voice Navigation, UPI Payments, Doctor Scheduling, and Live Queue Tracking.">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Canvas Confetti for booking success -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" defer></script>
+
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Google Translate Callback (must be defined before GT script loads) -->
+  <script>
+    function googleTranslateElementInit() {
+      if (typeof google === 'undefined' || !google.translate) return;
+      new google.translate.TranslateElement({
+        pageLanguage: 'en',
+        autoDisplay: false
+      }, 'google_translate_element');
+    }
+    // Safety stub: if Lucide fails to load from CDN, provide a no-op so the app never crashes
+    window.addEventListener('DOMContentLoaded', function() {
+      if (!window.lucide) {
+        window.lucide = { createIcons: function() {} };
+      }
+    });
+  </script>
+</head>
+<body class="dark-theme">
+  <!-- Hidden Google Translate element (required by GT library) -->
+  <div id="google_translate_element" style="display:none!important;visibility:hidden;position:absolute;"></div>
+  <!-- Dynamic Background Glow Gradients -->
+  <div class="bg-glow-orb orb-1"></div>
+  <div class="bg-glow-orb orb-2"></div>
+  <div class="bg-glow-orb orb-3"></div>
+
+  <!-- Main Navigation Bar -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo-area" id="brand-logo" onclick="switchPortal('portal-voice')">
+        <div class="logo-icon-wrap">
+          <i data-lucide="activity" class="pulse-icon"></i>
+          <span class="live-dot"></span>
+        </div>
+        <div class="logo-text">
+          <h1>SMART QUEUE <span class="ai-badge">AI</span></h1>
+          <p class="tagline">Autonomous Hospital Queue & Clinical Flow</p>
+        </div>
+      </div>
+
+      <!-- Portal Switcher Bar -->
+      <nav class="portal-nav" aria-label="Portal Navigation">
+        <button class="portal-tab-btn" id="nav-btn-hospital" onclick="switchPortal('portal-hospital')">
+          <i data-lucide="building-2"></i>
+          <span>Hospital Portal</span>
+          <span class="tab-indicator"></span>
+        </button>
+        <button class="portal-tab-btn" id="nav-btn-patient" onclick="switchPortal('portal-patient')">
+          <i data-lucide="user-round-check"></i>
+          <span>Patient Portal</span>
+          <span class="tab-indicator"></span>
+        </button>
+        <button class="portal-tab-btn active" id="nav-btn-voice" onclick="switchPortal('portal-voice')">
+          <i data-lucide="mic"></i>
+          <span>Voice AI Portal</span>
+          <span class="ai-voice-pill">Auto-Open</span>
+          <span class="tab-indicator"></span>
+        </button>
+      </nav>
+
+      <!-- User Session & Quick Status -->
+      <div class="header-right-meta">
+        <!-- Language Switcher Button -->
+        <button id="lang-switcher-btn" onclick="openLangModal()" title="Change Language — Select World Language" aria-label="Language Selector">
+          <span class="lsb-flag">🌐</span>
+          <span class="lsb-name">English</span>
+          <span class="lsb-arrow">&#9662;</span>
+        </button>
+
+        <div class="live-clock" id="live-clock">--:--:--</div>
+        <div class="user-status-chip" id="user-status-chip">
+          <span class="avatar-mini" id="user-avatar-mini"><i data-lucide="shield-check"></i></span>
+          <span class="user-name-display" id="user-name-display">Guest Mode</span>
+          <button class="btn-logout" id="btn-logout" onclick="logoutCurrentSession()" title="Logout" style="display: none;">
+            <i data-lucide="log-out"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Live Marquee Notification Banner -->
+  <div class="live-announcement-bar">
+    <div class="announcement-content">
+      <span class="pulse-badge"><i data-lucide="zap"></i> LIVE AI ENGINE</span>
+      <span id="db-status-chip" class="db-status-chip db-connecting">
+        <i data-lucide="cloud"></i> <span id="db-status-text">Connecting to Cloud DB...</span>
+      </span>
+      <span class="announcement-text" id="announcement-text">
+        Real-time Queue Prediction Active • Voice Assistant is ready to navigate anywhere on voice command • UPI Instant Gateway verified
+      </span>
+    </div>
+  </div>
+
+
+  <!-- Global Toast / Alert Banner System -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- MAIN VIEWPORT CONTAINER -->
+  <main class="main-content-viewport">
+
+    <!-- ========================================================================= -->
+    <!-- PORTAL 1: HOSPITAL PORTAL                                                 -->
+    <!-- ========================================================================= -->
+    <section id="portal-hospital" class="portal-view" style="display: none;">
+      <div class="portal-header-banner hospital-gradient">
+        <div class="banner-text">
+          <div class="portal-tag"><i data-lucide="hospital"></i> Portal 1 • Healthcare Administration</div>
+          <h2>Hospital Operations & Doctor Roster Management</h2>
+          <p>Register hospital, manage medical departments, set doctor leave dates, lunch hours, and consultation pricing.</p>
+        </div>
+        <div class="banner-quick-actions" id="hospital-quick-actions" style="display: none;">
+          <button class="btn-secondary-glass" onclick="seedSampleData()">
+            <i data-lucide="database"></i> Load Demo Hospital Data
+          </button>
+        </div>
+      </div>
+
+      <!-- Hospital Authentication Section (Shown when logged out) -->
+      <div id="hospital-auth-container" class="auth-wrapper">
+        <div class="auth-card glass-panel">
+          <div class="auth-tabs">
+            <button class="auth-tab-btn active" id="tab-btn-hosp-login" onclick="toggleHospitalAuthTab('login')">
+              <i data-lucide="log-in"></i> Hospital Login
+            </button>
+            <button class="auth-tab-btn" id="tab-btn-hosp-signup" onclick="toggleHospitalAuthTab('signup')">
+              <i data-lucide="user-plus"></i> Hospital Sign Up
+            </button>
+          </div>
+
+          <!-- Hospital Login Form -->
+          <form id="hospital-login-form" class="auth-form" onsubmit="handleHospitalLogin(event)">
+            <div class="form-intro">
+              <h3>Welcome Back to Hospital Portal</h3>
+              <p>Enter your hospital credentials to access the roster & queue dashboard.</p>
+            </div>
+            <div class="form-group">
+              <label for="hosp-login-name"><i data-lucide="building"></i> Hospital Name</label>
+              <input type="text" id="hosp-login-name" required placeholder="e.g. City Health Multi-Speciality Hospital" autocomplete="organization">
+            </div>
+            <div class="form-group">
+              <label for="hosp-login-password"><i data-lucide="lock"></i> Password</label>
+              <div class="password-input-wrap">
+                <input type="password" id="hosp-login-password" required placeholder="Enter hospital security password">
+                <button type="button" class="eye-toggle" onclick="togglePasswordVisibility('hosp-login-password')">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary-gradient w-100">
+                <i data-lucide="shield-check"></i> Login to Hospital Portal
+              </button>
+            </div>
+            <div class="quick-demo-login">
+              <span>Quick Demo:</span>
+              <button type="button" class="btn-chip" onclick="fillDemoHospital()">Use Demo: Apollo Care Hospital</button>
+            </div>
+          </form>
+
+          <!-- Hospital Sign Up Form -->
+          <form id="hospital-signup-form" class="auth-form" style="display: none;" onsubmit="handleHospitalSignup(event)">
+            <div class="form-intro">
+              <h3>Register New Hospital</h3>
+              <p>Create your institutional account with UPI ID for direct patient payments.</p>
+            </div>
+            <div class="form-group">
+              <label for="hosp-signup-name"><i data-lucide="building"></i> Hospital Name <span class="req">*</span></label>
+              <input type="text" id="hosp-signup-name" required placeholder="e.g. Metro Super Speciality Hospital">
+            </div>
+            <div class="form-group">
+              <label for="hosp-signup-password"><i data-lucide="lock"></i> Password <span class="req">*</span></label>
+              <div class="password-input-wrap">
+                <input type="password" id="hosp-signup-password" required placeholder="Create secure password (min 6 characters)">
+                <button type="button" class="eye-toggle" onclick="togglePasswordVisibility('hosp-signup-password')">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="hosp-signup-upi"><i data-lucide="credit-card"></i> Hospital UPI ID <span class="req">*</span></label>
+              <div class="input-with-hint">
+                <input type="text" id="hosp-signup-upi" required placeholder="e.g. metrohospital@icici or hospital@okhdfcbank">
+                <small class="field-hint">Patient consultation payments will be credited directly to this UPI ID</small>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="hosp-signup-address"><i data-lucide="map-pin"></i> Complete Address <span class="req">*</span></label>
+              <textarea id="hosp-signup-address" rows="3" required placeholder="Street address, Landmark, City, State, PIN Code"></textarea>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary-gradient w-100">
+                <i data-lucide="check-circle-2"></i> Register Hospital & Open Portal
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Hospital Dashboard (Shown when logged in) -->
+      <div id="hospital-dashboard" class="dashboard-wrapper" style="display: none;">
+        <!-- Top Hospital Profile Strip -->
+        <div class="hospital-profile-card glass-panel">
+          <div class="profile-info-left">
+            <div class="hosp-avatar-icon">
+              <i data-lucide="hospital"></i>
+            </div>
+            <div>
+              <div class="badge-active-live"><i data-lucide="radio"></i> Hospital Verified Online</div>
+              <h2 id="active-hosp-title">Apollo Care Hospital</h2>
+              <div class="hosp-meta-tags">
+                <span class="meta-tag"><i data-lucide="credit-card"></i> UPI: <strong id="active-hosp-upi">apollo@icici</strong></span>
+                <span class="meta-tag"><i data-lucide="map-pin"></i> <span id="active-hosp-address">45 Healthcare Blvd, Metro City</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="profile-stats-right">
+            <div class="stat-box">
+              <span class="stat-number" id="hosp-stat-doctors">0</span>
+              <span class="stat-label">Active Doctors</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-number" id="hosp-stat-queue">0</span>
+              <span class="stat-label">Total Patients in Queue</span>
+            </div>
+            <button class="btn-outline-danger" onclick="logoutHospital()">
+              <i data-lucide="log-out"></i> Switch / Logout
+            </button>
+          </div>
+        </div>
+
+        <!-- Add Doctor Form & Doctors Grid Layout -->
+        <div class="dashboard-grid">
+          <!-- Left Column: Add Doctor Form -->
+          <div class="grid-card glass-panel">
+            <div class="card-title-bar">
+              <div class="card-title-icon"><i data-lucide="user-plus"></i></div>
+              <div>
+                <h3>Add Doctor to Roster</h3>
+                <p>Register new physician with department, leave schedule & lunch break</p>
+              </div>
+            </div>
+
+            <form id="add-doctor-form" onsubmit="handleAddDoctor(event)" class="doctor-form">
+              <div class="form-group">
+                <label for="doc-name"><i data-lucide="stethoscope"></i> Doctor Name <span class="req">*</span></label>
+                <input type="text" id="doc-name" required placeholder="e.g. Dr. Rajesh Sharma, MD (Cardiology)">
+              </div>
+
+              <div class="form-group">
+                <label for="doc-dept"><i data-lucide="layers"></i> Department / Specialization <span class="req">*</span></label>
+                <select id="doc-dept" required>
+                  <option value="" disabled selected>Select Medical Department</option>
+                  <option value="Cardiology">Cardiology (Heart & Vascular)</option>
+                  <option value="Neurology">Neurology (Brain & Spine)</option>
+                  <option value="Pediatrics">Pediatrics (Child Healthcare)</option>
+                  <option value="Orthopedics">Orthopedics (Bone & Joints)</option>
+                  <option value="Dermatology">Dermatology (Skin & Care)</option>
+                  <option value="General Medicine">General Medicine & Physician</option>
+                  <option value="ENT Specialist">ENT (Ear, Nose & Throat)</option>
+                  <option value="Gynecology">Gynecology & Obstetrics</option>
+                  <option value="Ophthalmology">Ophthalmology (Eye Care)</option>
+                  <option value="Emergency Care">Emergency & Trauma Care</option>
+                </select>
+              </div>
+
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label for="doc-leaves"><i data-lucide="calendar-x"></i> Set Date as Leaves <span class="req">*</span></label>
+                  <input type="date" id="doc-leaves" required>
+                  <small class="field-hint">Patients cannot book appointments on this leave date</small>
+                </div>
+                <div class="form-group">
+                  <label for="doc-fee"><i data-lucide="indian-rupee"></i> Set Amount to Pay (Fee) <span class="req">*</span></label>
+                  <div class="currency-input-wrap">
+                    <span class="currency-prefix">₹</span>
+                    <input type="number" id="doc-fee" min="0" step="50" required placeholder="500">
+                  </div>
+                  <small class="field-hint">Consultation fee charged via UPI</small>
+                </div>
+              </div>
+
+              <!-- Set Patient Visiting Time (09:00 AM to 05:00 PM) -->
+              <div class="form-group">
+                <label><i data-lucide="clock"></i> Set Patient Visiting Time (Standard Time) <span class="req">*</span></label>
+                <div class="form-row-2">
+                  <div class="input-with-label">
+                    <span class="sub-label">Visiting Start:</span>
+                    <input type="time" id="doc-visiting-start" required value="09:00" onchange="updateVisitingStandardTimeDisplay()">
+                  </div>
+                  <div class="input-with-label">
+                    <span class="sub-label">Visiting End:</span>
+                    <input type="time" id="doc-visiting-end" required value="17:00" onchange="updateVisitingStandardTimeDisplay()">
+                  </div>
+                </div>
+                <div class="standard-time-pill" id="visiting-standard-time-display">
+                  <i data-lucide="clock"></i> Standard Time: <strong>09:00 AM – 05:00 PM (Patient Visiting Time)</strong>
+                </div>
+                <div class="time-presets-row">
+                  <span class="preset-label">Standard Presets:</span>
+                  <button type="button" class="btn-time-preset active btn-visiting-preset" onclick="setVisitingPreset('09:00', '17:00', this)">09:00 AM - 05:00 PM (Standard OPD)</button>
+                  <button type="button" class="btn-time-preset btn-visiting-preset" onclick="setVisitingPreset('08:30', '16:30', this)">08:30 AM - 04:30 PM</button>
+                  <button type="button" class="btn-time-preset btn-visiting-preset" onclick="setVisitingPreset('10:00', '18:00', this)">10:00 AM - 06:00 PM</button>
+                </div>
+                <small class="field-hint">Patients can book consultation visits only between 09:00 AM and 05:00 PM</small>
+              </div>
+
+              <!-- Set Time as Lunch / Break (01:00 PM to 02:00 PM) -->
+              <div class="form-group">
+                <label><i data-lucide="coffee"></i> Set Time as Lunch / Break (Standard Time) <span class="req">*</span></label>
+                <div class="form-row-2">
+                  <div class="input-with-label">
+                    <span class="sub-label">Lunch Start:</span>
+                    <input type="time" id="doc-lunch-start" required value="13:00" onchange="updateLunchStandardTimeDisplay()">
+                  </div>
+                  <div class="input-with-label">
+                    <span class="sub-label">Lunch End:</span>
+                    <input type="time" id="doc-lunch-end" required value="14:00" onchange="updateLunchStandardTimeDisplay()">
+                  </div>
+                </div>
+                <div class="standard-time-pill" id="lunch-standard-time-display">
+                  <i data-lucide="coffee"></i> Standard Time: <strong>01:00 PM – 02:00 PM (Doctor Lunch Break)</strong>
+                </div>
+                <div class="time-presets-row">
+                  <span class="preset-label">Standard Presets:</span>
+                  <button type="button" class="btn-time-preset active btn-lunch-preset" onclick="setLunchPreset('13:00', '14:00', this)">01:00 PM - 02:00 PM (Standard Lunch)</button>
+                  <button type="button" class="btn-time-preset btn-lunch-preset" onclick="setLunchPreset('12:30', '13:30', this)">12:30 PM - 01:30 PM</button>
+                  <button type="button" class="btn-time-preset btn-lunch-preset" onclick="setLunchPreset('13:30', '14:30', this)">01:30 PM - 02:30 PM</button>
+                </div>
+                <small class="field-hint">Doctor is on lunch break from 01:00 PM to 02:00 PM and appointments are blocked</small>
+              </div>
+
+              <div class="form-group">
+                <label for="doc-room"><i data-lucide="door-closed"></i> Consultation Room / OPD Cabin</label>
+                <input type="text" id="doc-room" placeholder="e.g. OPD Room #104, 2nd Floor">
+              </div>
+
+              <button type="submit" class="btn-primary-gradient w-100" id="btn-save-doctor">
+                <i data-lucide="plus-circle"></i> Save Doctor to Hospital Roster
+              </button>
+            </form>
+          </div>
+
+          <!-- Right Column: Current Doctors Roster & Live Patient Queue -->
+          <div class="grid-card glass-panel">
+            <div class="card-title-bar space-between">
+              <div class="d-flex align-center gap-10">
+                <div class="card-title-icon"><i data-lucide="users"></i></div>
+                <div>
+                  <h3>Doctors Directory & Live Queues</h3>
+                  <p>Real-time queue monitoring & roster status</p>
+                </div>
+              </div>
+              <span class="counter-badge" id="doctor-roster-count">0 Doctors</span>
+            </div>
+
+            <!-- Doctor List Container -->
+            <div id="hospital-doctors-list" class="doctors-cards-list">
+              <!-- Dynamically populated -->
+            </div>
+
+            <!-- Hospital Live Queue Monitor for current appointments -->
+            <div class="live-queue-section-admin">
+              <div class="sub-header-bar">
+                <h4><i data-lucide="activity"></i> Today's Live Queue for This Hospital</h4>
+                <button class="btn-mini-refresh" onclick="refreshHospitalQueueView()"><i data-lucide="refresh-cw"></i> Refresh</button>
+              </div>
+              <div id="hospital-live-queue-list" class="queue-admin-table-wrap">
+                <!-- Dynamically populated queue rows -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- PORTAL 2: PATIENT PORTAL                                                  -->
+    <!-- ========================================================================= -->
+    <section id="portal-patient" class="portal-view" style="display: none;">
+      <div class="portal-header-banner patient-gradient">
+        <div class="banner-text">
+          <div class="portal-tag"><i data-lucide="user-check"></i> Portal 2 • Patient Care & Smart Queue</div>
+          <h2>Find Hospitals, Book Doctors & Smart AI Queue Token</h2>
+          <p>Search verified hospitals, select specialist doctors, share live location, upload prescriptions, and pay via UPI.</p>
+        </div>
+        <div class="banner-quick-actions">
+          <button class="btn-secondary-glass" onclick="seedSampleData()">
+            <i data-lucide="sparkles"></i> Load Demo Data
+          </button>
+        </div>
+      </div>
+
+      <!-- Patient Authentication Section (Shown when logged out) -->
+      <div id="patient-auth-container" class="auth-wrapper">
+        <div class="auth-card glass-panel wide-auth-card">
+          <div class="auth-tabs">
+            <button class="auth-tab-btn active" id="tab-btn-patient-login" onclick="togglePatientAuthTab('login')">
+              <i data-lucide="log-in"></i> Patient Login
+            </button>
+            <button class="auth-tab-btn" id="tab-btn-patient-signup" onclick="togglePatientAuthTab('signup')">
+              <i data-lucide="user-plus"></i> Patient Sign Up
+            </button>
+          </div>
+
+          <!-- Patient Login Form -->
+          <form id="patient-login-form" class="auth-form" onsubmit="handlePatientLogin(event)">
+            <div class="form-intro">
+              <h3>Patient Access Portal</h3>
+              <p>Enter your patient name, registered email and password.</p>
+            </div>
+            <div class="form-group">
+              <label for="patient-login-name"><i data-lucide="user"></i> Patient Name (Optional)</label>
+              <input type="text" id="patient-login-name" placeholder="e.g. John Doe">
+            </div>
+            <div class="form-group">
+              <label for="patient-login-email"><i data-lucide="mail"></i> Email Address <span class="req">*</span></label>
+              <input type="email" id="patient-login-email" required placeholder="e.g. john@example.com">
+            </div>
+            <div class="form-group">
+              <label for="patient-login-password"><i data-lucide="lock"></i> Password</label>
+              <div class="password-input-wrap">
+                <input type="password" id="patient-login-password" required placeholder="Enter your secret password">
+                <button type="button" class="eye-toggle" onclick="togglePasswordVisibility('patient-login-password')">
+                  <i data-lucide="eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn-primary-gradient w-100">
+                <i data-lucide="arrow-right-circle"></i> Login to Patient Dashboard
+              </button>
+            </div>
+            <div class="quick-demo-login">
+              <span>Quick Demo:</span>
+              <button type="button" class="btn-chip" onclick="fillDemoPatient()">Use Demo: Alex Morgan (alex@care.com)</button>
+            </div>
+          </form>
+
+          <!-- Patient Sign Up Form -->
+          <form id="patient-signup-form" class="auth-form" style="display: none;" onsubmit="handlePatientSignup(event)">
+            <div class="form-intro">
+              <h3>Patient Registration</h3>
+              <p>Fill in your personal health details to create an intelligent medical profile.</p>
+            </div>
+            <div class="form-grid-2">
+              <div class="form-group">
+                <label for="patient-signup-name"><i data-lucide="user"></i> Patient Name <span class="req">*</span></label>
+                <input type="text" id="patient-signup-name" required placeholder="Full Name">
+              </div>
+
+              <div class="form-group">
+                <label for="patient-signup-gender"><i data-lucide="users"></i> Gender <span class="req">*</span></label>
+                <select id="patient-signup-gender" required>
+                  <option value="" disabled selected>Select Gender</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                  <option value="Other">Other / Non-Binary</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="patient-signup-dob"><i data-lucide="calendar"></i> Date of Birth <span class="req">*</span></label>
+                <input type="date" id="patient-signup-dob" required>
+              </div>
+
+              <div class="form-group">
+                <label for="patient-signup-blood"><i data-lucide="droplet"></i> Blood Group <span class="req">*</span></label>
+                <select id="patient-signup-blood" required>
+                  <option value="" disabled selected>Select Blood Group</option>
+                  <option value="A+">A Positive (A+)</option>
+                  <option value="A-">A Negative (A-)</option>
+                  <option value="B+">B Positive (B+)</option>
+                  <option value="B-">B Negative (B-)</option>
+                  <option value="O+">O Positive (O+)</option>
+                  <option value="O-">O Negative (O-)</option>
+                  <option value="AB+">AB Positive (AB+)</option>
+                  <option value="AB-">AB Negative (AB-)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="patient-signup-email"><i data-lucide="mail"></i> Email Address <span class="req">*</span></label>
+                <input type="email" id="patient-signup-email" required placeholder="name@domain.com">
+              </div>
+
+              <div class="form-group">
+                <label for="patient-signup-password"><i data-lucide="lock"></i> Password <span class="req">*</span></label>
+                <div class="password-input-wrap">
+                  <input type="password" id="patient-signup-password" required placeholder="Choose a password (min 6 characters)">
+                  <button type="button" class="eye-toggle" onclick="togglePasswordVisibility('patient-signup-password')">
+                    <i data-lucide="eye"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="patient-signup-address"><i data-lucide="map-pin"></i> Residential Address <span class="req">*</span></label>
+              <textarea id="patient-signup-address" rows="2" required placeholder="Enter home address, city, and pincode"></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn-primary-gradient w-100">
+                <i data-lucide="user-check"></i> Complete Sign Up & Enter Portal
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Patient Main Booking & Live Queue Dashboard (Shown when logged in) -->
+      <div id="patient-dashboard" class="dashboard-wrapper" style="display: none;">
+        
+        <!-- Patient Banner Info -->
+        <div class="patient-welcome-bar glass-panel">
+          <div class="patient-left-info">
+            <div class="patient-avatar-box">
+              <i data-lucide="heart-pulse"></i>
+            </div>
+            <div>
+              <div class="patient-status-pill"><i data-lucide="activity"></i> Active Patient Session</div>
+              <h2 id="patient-active-name">Alex Morgan</h2>
+              <div class="patient-submeta">
+                <span><i data-lucide="mail"></i> <strong id="patient-active-email">alex@care.com</strong></span>
+                <span><i data-lucide="droplet"></i> Blood: <strong id="patient-active-blood">O+</strong></span>
+                <span><i data-lucide="map-pin"></i> <span id="patient-active-address">Indira Nagar, Bangalore</span></span>
+              </div>
+            </div>
+          </div>
+          <div class="patient-right-cta">
+            <button class="btn-outline-danger" onclick="logoutPatient()">
+              <i data-lucide="log-out"></i> Log Out
+            </button>
+          </div>
+        </div>
+
+        <!-- ACTIVE TOKEN LIVE TICKER BANNER (If patient has active queue token) -->
+        <div id="active-token-banner" class="active-token-card glass-panel" style="display: none;">
+          <div class="token-banner-header">
+            <div class="token-headline">
+              <span class="live-blink-dot"></span>
+              <h4>YOUR LIVE QUEUE TOKEN</h4>
+            </div>
+            <span class="token-id-chip" id="banner-token-number">#TQ-101</span>
+          </div>
+          <div class="token-banner-body">
+            <div class="token-stat">
+              <span class="stat-caption">Doctor</span>
+              <strong id="banner-token-doctor">Dr. Sarah Mitchell</strong>
+            </div>
+            <div class="token-stat">
+              <span class="stat-caption">Hospital</span>
+              <strong id="banner-token-hospital">Apollo Care Hospital</strong>
+            </div>
+            <div class="token-stat">
+              <span class="stat-caption">Est. Waiting Time</span>
+              <strong class="text-accent" id="banner-token-wait">~12 Mins</strong>
+            </div>
+            <div class="token-stat">
+              <span class="stat-caption">Queue Position</span>
+              <strong class="text-warning" id="banner-token-pos">2 Patients Ahead</strong>
+            </div>
+            <div class="token-stat">
+              <span class="stat-caption">Payment Status</span>
+              <strong class="text-success"><i data-lucide="check-circle-2"></i> Paid (UPI)</strong>
+            </div>
+          </div>
+          <div class="token-banner-footer">
+            <div class="location-status-badge" id="banner-token-location-status">
+              <i data-lucide="navigation"></i> Location Shared with Clinic
+            </div>
+            <button class="btn-cancel-token" onclick="cancelActiveAppointment()">
+              <i data-lucide="x"></i> Cancel Appointment
+            </button>
+          </div>
+        </div>
+
+        <!-- 3-STEP APPOINTMENT BOOKING WORKFLOW -->
+        <div class="booking-flow-container">
+          
+          <!-- STEP 1: SEARCH HOSPITAL -->
+          <div class="flow-step-card glass-panel" id="step-search-hospital">
+            <div class="step-badge">STEP 1</div>
+            <div class="step-header">
+              <h3><i data-lucide="search"></i> Search Hospital Name</h3>
+              <p>Find partner hospitals by name, city, or address</p>
+            </div>
+
+            <div class="search-input-box">
+              <i data-lucide="search" class="search-icon"></i>
+              <input type="text" id="patient-search-hospital-input" placeholder="Type hospital name e.g. Apollo, Metro, City Care..." oninput="handleHospitalSearch(this.value)">
+              <button class="btn-clear-search" onclick="clearHospitalSearch()"><i data-lucide="x"></i></button>
+            </div>
+
+            <!-- Hospital Search Results Grid -->
+            <div id="hospitals-search-results" class="hospital-cards-grid">
+              <!-- Dynamically populated hospital cards -->
+            </div>
+          </div>
+
+          <!-- STEP 2: SELECT DOCTOR & DETAILS -->
+          <div class="flow-step-card glass-panel" id="step-select-doctor">
+            <div class="step-badge">STEP 2</div>
+            <div class="step-header">
+              <h3><i data-lucide="stethoscope"></i> Select Doctor</h3>
+              <p id="doctor-selection-subtitle">Choose a physician from the selected hospital</p>
+            </div>
+
+            <div id="selected-hospital-summary" class="selected-hospital-strip" style="display: none;">
+              <div class="selected-hosp-info">
+                <i data-lucide="building-2"></i>
+                <div>
+                  <h4 id="selected-hosp-name-text">Selected Hospital</h4>
+                  <p id="selected-hosp-upi-text">UPI: --</p>
+                </div>
+              </div>
+              <button class="btn-chip" onclick="resetHospitalSelection()"><i data-lucide="arrow-left"></i> Change Hospital</button>
+            </div>
+
+            <!-- Doctor Cards Container -->
+            <div id="doctors-selection-grid" class="doctor-selection-grid">
+              <div class="empty-state-notice">
+                <i data-lucide="building"></i>
+                <p>Please search and select a hospital in Step 1 to view available doctors.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- STEP 3: SCHEDULE, LOCATION, PRESCRIPTION & PAYMENT -->
+          <div class="flow-step-card glass-panel" id="step-booking-actions">
+            <div class="step-badge">STEP 3</div>
+            <div class="step-header">
+              <h3><i data-lucide="calendar-check-2"></i> Date, Time, Location, Prescription & UPI Payment</h3>
+              <p>Finalize appointment requirements with intelligent conflict detection</p>
+            </div>
+
+            <form id="appointment-booking-form" onsubmit="handleInitiateBooking(event)" class="booking-form-grid">
+              
+              <!-- Selected Doctor Highlight -->
+              <div class="selected-doctor-banner" id="selected-doctor-banner" style="display: none;">
+                <div class="sel-doc-avatar"><i data-lucide="stethoscope"></i></div>
+                <div class="sel-doc-meta">
+                  <h4 id="sel-doc-name">Dr. Name</h4>
+                  <div class="sel-doc-tags">
+                    <span class="badge-dept" id="sel-doc-dept">Cardiology</span>
+                    <span class="badge-fee" id="sel-doc-fee">Fee: ₹500</span>
+                    <span class="badge-visiting" id="sel-doc-visiting"><i data-lucide="clock"></i> Visiting: 09:00 AM – 05:00 PM</span>
+                    <span class="badge-lunch" id="sel-doc-lunch"><i data-lucide="coffee"></i> Lunch: 01:00 PM – 02:00 PM</span>
+                    <span class="badge-leaves" id="sel-doc-leaves"><i data-lucide="calendar-x"></i> Leaves: None</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Doctor Visiting Hours & Lunch Notice -->
+              <div class="visiting-hours-notice" id="doc-visiting-hours-notice">
+                <div class="visiting-item">
+                  <i data-lucide="clock"></i>
+                  <span>Patient Visiting Time: <strong id="notice-visiting-time">09:00 AM – 05:00 PM (Standard Time)</strong></span>
+                </div>
+                <div class="visiting-item">
+                  <i data-lucide="coffee"></i>
+                  <span>Lunch Break: <strong id="notice-lunch-time">01:00 PM – 02:00 PM (Standard Time)</strong></span>
+                </div>
+              </div>
+
+              <!-- Date and Time Picker -->
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label for="book-date"><i data-lucide="calendar"></i> Set Appointment Date <span class="req">*</span></label>
+                  <input type="date" id="book-date" required onchange="validateAppointmentDate(this.value)">
+                  <div id="date-validation-alert" class="validation-msg" style="display: none;"></div>
+                </div>
+
+                <div class="form-group">
+                  <label for="book-time"><i data-lucide="clock"></i> Set Appointment Time (Standard Time) <span class="req">*</span></label>
+                  <input type="time" id="book-time" required onchange="onAppointmentTimeInputChange(this.value)">
+                  <div class="standard-time-pill" id="book-standard-time-display" style="margin-top: 6px;">
+                    <i data-lucide="clock-4"></i> Standard Time: <strong id="book-standard-text">10:00 AM (IST Standard Time)</strong>
+                  </div>
+                  <div class="slots-section" style="margin-top: 8px;">
+                    <span class="sub-label">Select Standard Time Slot:</span>
+                    <div class="time-slots-grid" id="standard-time-slots-grid">
+                      <!-- Populated dynamically with standard time slots -->
+                    </div>
+                  </div>
+                  <div id="time-validation-alert" class="validation-msg" style="display: none;"></div>
+                </div>
+              </div>
+
+              <!-- Location Sharing Feature -->
+              <div class="booking-feature-card">
+                <div class="feature-head">
+                  <div class="feature-icon"><i data-lucide="map-pin"></i></div>
+                  <div>
+                    <h4>Share Your Live Location</h4>
+                    <p>Allows the hospital queue algorithm to calculate travel time & prepare token prioritization</p>
+                  </div>
+                </div>
+                <div class="feature-action-area">
+                  <button type="button" class="btn-location-share" id="btn-share-location" onclick="handleShareLocation()">
+                    <i data-lucide="navigation"></i> <span id="location-btn-text">Share My Current Location</span>
+                  </button>
+                  <div id="location-coords-display" class="coords-box" style="display: none;">
+                    <i data-lucide="check-circle" class="text-success"></i>
+                    <span id="coords-text">Lat: 12.9716° N, Lng: 77.5946° E (Est. 12 mins to hospital)</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Prescription Upload Feature -->
+              <div class="booking-feature-card">
+                <div class="feature-head">
+                  <div class="feature-icon"><i data-lucide="file-text"></i></div>
+                  <div>
+                    <h4>Upload Your Prescription</h4>
+                    <p>Upload prior doctor prescription, lab reports or medical history (Image or PDF)</p>
+                  </div>
+                </div>
+                <div class="feature-action-area">
+                  <div class="upload-dropzone" id="prescription-dropzone" onclick="document.getElementById('prescription-file-input').click()">
+                    <input type="file" id="prescription-file-input" accept="image/*,application/pdf" style="display: none;" onchange="handlePrescriptionFile(this)">
+                    <i data-lucide="upload-cloud" class="upload-icon"></i>
+                    <p class="dropzone-text"><strong>Click to browse</strong> or drag & drop prescription</p>
+                    <span class="file-support-text">Supported: PNG, JPG, JPEG, PDF (Max 10MB)</span>
+                  </div>
+
+                  <!-- Prescription Preview Card -->
+                  <div id="prescription-preview-card" class="prescription-preview-card" style="display: none;">
+                    <div class="preview-media" id="preview-media-container"></div>
+                    <div class="preview-info">
+                      <div class="file-name" id="preview-filename">prescription_report.jpg</div>
+                      <div class="file-size" id="preview-filesize">1.4 MB • Verified by AI</div>
+                      <div class="ai-ocr-chip"><i data-lucide="check-check"></i> Attached to Token Queue</div>
+                    </div>
+                    <button type="button" class="btn-remove-file" onclick="removePrescriptionFile()"><i data-lucide="trash-2"></i></button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Summary & Pay Button -->
+              <div class="booking-checkout-summary">
+                <div class="checkout-amount-box">
+                  <span class="checkout-label">Consultation Total Fee:</span>
+                  <span class="checkout-price" id="checkout-total-price">₹0</span>
+                  <span class="checkout-upi-tag" id="checkout-upi-id">Payable to: --</span>
+                </div>
+                <button type="submit" class="btn-primary-gradient btn-large" id="btn-proceed-pay">
+                  <i data-lucide="credit-card"></i> Option to Pay & Generate Smart Queue Token
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ========================================================================= -->
+    <!-- PORTAL 3: VOICE ASSISTANT PORTAL (MIC + AUTO-OPEN NAVIGATION)             -->
+    <!-- ========================================================================= -->
+    <section id="portal-voice" class="portal-view">
+      <div class="portal-header-banner voice-gradient">
+        <div class="banner-text">
+          <div class="portal-tag"><i data-lucide="mic"></i> Portal 3 • Autonomous Voice Navigation AI</div>
+          <h2>Smart Voice Assistant — Speak to Open Anything</h2>
+          <p>Click the microphone or speak commands. The AI listens, understands your intent, and <strong>automatically opens whatever you ask!</strong></p>
+        </div>
+      </div>
+
+      <div class="voice-assistant-container glass-panel">
+        
+        <!-- Animated Voice Sphere & Audio Waveform -->
+        <div class="voice-center-stage">
+          
+          <div class="mic-orb-wrapper">
+            <div class="pulse-ring ring-1"></div>
+            <div class="pulse-ring ring-2"></div>
+            <div class="pulse-ring ring-3"></div>
+            
+            <button class="mic-master-btn" id="btn-master-mic" onclick="toggleVoiceListening()" aria-label="Microphone Voice Assistant">
+              <i data-lucide="mic" id="master-mic-icon"></i>
+              <span class="mic-status-bubble" id="mic-status-bubble">Tap to Speak</span>
+            </button>
+          </div>
+
+          <!-- Dynamic Audio Canvas Waveform -->
+          <div class="waveform-canvas-box">
+            <canvas id="audio-waveform-canvas" width="600" height="90"></canvas>
+          </div>
+
+          <!-- AI Assistant Voice Transcript & Feedback Box -->
+          <div class="voice-transcript-card">
+            <div class="transcript-header">
+              <span class="ai-status-label" id="ai-voice-status">
+                <i data-lucide="bot"></i> AI Voice Assistant Ready
+              </span>
+              <span class="sound-toggle" onclick="toggleSpeechSynthesis()" title="Toggle Voice Feedback">
+                <i data-lucide="volume-2" id="voice-tts-icon"></i> <span id="tts-label">Voice On</span>
+              </span>
+            </div>
+
+            <div class="transcript-dialog-box">
+              <div class="bubble user-bubble" id="user-spoken-transcript">
+                <span class="bubble-caption">You said:</span>
+                <p id="user-transcript-text">"Press the microphone button and ask to open any portal, doctor, or feature..."</p>
+              </div>
+
+              <div class="bubble ai-bubble" id="ai-spoken-response">
+                <span class="bubble-caption">Smart Queue AI:</span>
+                <p id="ai-response-text">Hello! I am your Smart Queue AI Voice Assistant. Speak what you want to do — for example, say <strong>"Open hospital portal"</strong>, <strong>"Book doctor appointment"</strong>, <strong>"Sign up patient"</strong>, <strong>"Pay fee"</strong>, or <strong>"Upload prescription"</strong> and I will automatically open it for you!</p>
+              </div>
+            </div>
+
+            <!-- Alternative Text Input for Browsers with Mic Denied/Unsupported -->
+            <div class="voice-text-fallback">
+              <input type="text" id="voice-fallback-input" placeholder="Or type any voice command (e.g. 'Open hospital portal', 'Add doctor', 'Search Apollo')..." onkeydown="if(event.key==='Enter') executeVoiceCommandText(this.value)">
+              <button class="btn-voice-send" onclick="executeVoiceCommandText(document.getElementById('voice-fallback-input').value)">
+                <i data-lucide="send"></i> Execute
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voice Command Capability Showcase / Clickable Command Chips -->
+        <div class="voice-capabilities-grid">
+          <div class="capability-card">
+            <h4><i data-lucide="hospital"></i> Hospital Portal Voice Commands</h4>
+            <div class="command-chips-list">
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Open hospital portal')">
+                <i data-lucide="play-circle"></i> "Open hospital portal"
+              </button>
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Sign up as hospital')">
+                <i data-lucide="play-circle"></i> "Sign up as hospital"
+              </button>
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Add new doctor')">
+                <i data-lucide="play-circle"></i> "Add new doctor"
+              </button>
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Hospital login')">
+                <i data-lucide="play-circle"></i> "Hospital login"
+              </button>
+            </div>
+          </div>
+
+          <div class="capability-card">
+            <h4><i data-lucide="user-round-check"></i> Patient Booking Voice Commands</h4>
+            <div class="command-chips-list">
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Open patient portal')">
+                <i data-lucide="play-circle"></i> "Open patient portal"
+              </button>
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Sign up new patient')">
+                <i data-lucide="play-circle"></i> "Sign up new patient"
+              </button>
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Search hospital Apollo')">
+                <i data-lucide="play-circle"></i> "Search hospital Apollo"
+              </button>
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Book doctor appointment')">
+                <i data-lucide="play-circle"></i> "Book doctor appointment"
+              </button>
+            </div>
+          </div>
+
+          <div class="capability-card">
+            <h4><i data-lucide="zap"></i> Smart Features Voice Commands</h4>
+            <div class="command-chips-list">
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Share my location')">
+                <i data-lucide="play-circle"></i> "Share my location"
+              </button>
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Upload my prescription')">
+                <i data-lucide="play-circle"></i> "Upload my prescription"
+              </button>
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Option to pay')">
+                <i data-lucide="play-circle"></i> "Option to pay"
+              </button>
+              <button class="cmd-chip" onclick="simulateVoiceCommand('Check my queue token')">
+                <i data-lucide="play-circle"></i> "Check my queue token"
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: UPI PAYMENT GATEWAY & TOKEN GENERATION                             -->
+  <!-- ========================================================================= -->
+  <div id="payment-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card glass-panel payment-card">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <i data-lucide="shield-check" class="text-success"></i>
+          <div>
+            <h3>Secure UPI Payment Gateway</h3>
+            <p>Smart Queue AI Verified Merchant</p>
+          </div>
+        </div>
+        <button class="btn-modal-close" onclick="closePaymentModal()"><i data-lucide="x"></i></button>
+      </div>
+
+      <div class="payment-modal-body">
+        <!-- Hospital UPI Details & Bill -->
+        <div class="payment-bill-box">
+          <div class="bill-row">
+            <span>Hospital Name:</span>
+            <strong id="modal-pay-hosp-name">Apollo Care Hospital</strong>
+          </div>
+          <div class="bill-row">
+            <span>Doctor Name:</span>
+            <strong id="modal-pay-doc-name">Dr. Sarah Mitchell</strong>
+          </div>
+          <div class="bill-row">
+            <span>Department:</span>
+            <span class="badge-dept" id="modal-pay-dept">Cardiology</span>
+          </div>
+          <div class="bill-row">
+            <span>Hospital UPI ID:</span>
+            <code class="upi-code-badge" id="modal-pay-upi-id">apollo@icici</code>
+          </div>
+          <div class="bill-divider"></div>
+          <div class="bill-row total-row">
+            <span>Total Payable Amount:</span>
+            <strong class="price-highlight" id="modal-pay-amount">₹500</strong>
+          </div>
+        </div>
+
+        <!-- Dynamic UPI QR Code Canvas -->
+        <div class="qr-code-wrapper">
+          <div class="qr-frame">
+            <canvas id="upi-qr-canvas" width="200" height="200"></canvas>
+            <div class="qr-center-logo">
+              <i data-lucide="zap"></i>
+            </div>
+          </div>
+          <p class="qr-scan-instruction">Scan with Any UPI App (Google Pay, PhonePe, Paytm, BHIM)</p>
+        </div>
+
+        <!-- UPI App Quick Select / Simulation -->
+        <div class="upi-apps-row">
+          <div class="app-pill gpay"><i data-lucide="smartphone"></i> GPay</div>
+          <div class="app-pill phonepe"><i data-lucide="credit-card"></i> PhonePe</div>
+          <div class="app-pill paytm"><i data-lucide="wallet"></i> Paytm</div>
+          <div class="app-pill bhim"><i data-lucide="qr-code"></i> UPI</div>
+        </div>
+
+        <!-- Simulated UPI Transaction Input -->
+        <div class="form-group">
+          <label for="upi-ref-no"><i data-lucide="hash"></i> UPI Reference / UTR Number</label>
+          <input type="text" id="upi-ref-no" placeholder="e.g. 329482910482 (or click 1-Click Pay below)">
+        </div>
+
+        <div class="payment-actions">
+          <button class="btn-primary-gradient w-100 btn-large" onclick="confirmPaymentAndGenerateToken()">
+            <i data-lucide="check-check"></i> 1-Click Test Pay & Generate Queue Token
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL: TOKEN SUCCESS & LIVE PASS                                          -->
+  <!-- ========================================================================= -->
+  <div id="token-success-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-card glass-panel token-modal-card">
+      <div class="token-pass-card">
+        <div class="token-pass-head">
+          <div class="pass-brand">
+            <i data-lucide="activity"></i>
+            <span>SMART QUEUE AI TOKEN PASS</span>
+          </div>
+          <div class="pass-date" id="pass-generated-date">Today</div>
+        </div>
+
+        <div class="token-pass-main">
+          <div class="token-number-hero" id="modal-token-number">#TQ-104</div>
+          <div class="token-subtitle">Priority Queue Token Confirmed</div>
+
+          <div class="pass-details-grid">
+            <div class="pass-cell">
+              <label>Patient Name</label>
+              <strong id="pass-patient-name">Alex Morgan</strong>
+            </div>
+            <div class="pass-cell">
+              <label>Doctor</label>
+              <strong id="pass-doctor-name">Dr. Sarah Mitchell</strong>
+            </div>
+            <div class="pass-cell">
+              <label>Hospital</label>
+              <strong id="pass-hospital-name">Apollo Care Hospital</strong>
+            </div>
+            <div class="pass-cell">
+              <label>Estimated Wait</label>
+              <strong class="text-accent" id="pass-wait-time">~15 Minutes</strong>
+            </div>
+            <div class="pass-cell">
+              <label>Appointment Time</label>
+              <strong id="pass-appointment-time">10:30 AM</strong>
+            </div>
+            <div class="pass-cell">
+              <label>Payment</label>
+              <strong class="text-success"><i data-lucide="check"></i> Verified UPI</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="token-pass-actions">
+          <button class="btn-primary-gradient w-100" onclick="closeTokenModalAndTrack()">
+            <i data-lucide="eye"></i> Track My Live Queue Position
+          </button>
+          <button class="btn-secondary-glass w-100 mt-10" onclick="window.print()">
+            <i data-lucide="printer"></i> Print / Save Token
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio elements for feedback sound effects -->
+  <audio id="audio-chime" preload="auto">
+    <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- Google Translate Script (loads GT widget; calls googleTranslateElementInit) -->
+  <script src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async defer></script>
+
+  <!-- Firebase SDK (compat version — works with existing JS without module bundler) -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-analytics-compat.js"></script>
+
+  <!-- Lucide Icons (loaded here at bottom so HTML parses first, then icons render synchronously) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Firebase Configuration (logic-legends-pro1 project) -->
+  <script src="firebase-config.js"></script>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+
+  <!-- Ensure Lucide icons render after deferred scripts load -->
+  <script>
+    window.addEventListener('load', function() {
+      if (window.lucide) window.lucide.createIcons();
+    });
+  </script>
+
+  <!-- Global Multi-Language System -->
+  <script src="i18n.js"></script>
+</body>
+</html>
