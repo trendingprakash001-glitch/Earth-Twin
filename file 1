@@ -1,0 +1,2017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EarthTwin – The Planetary Analog Intelligence Platform</title>
+  <meta name="description" content="EarthTwin: Identify locations on Earth with environmental characteristics similar to Mars, the Moon and Venus for preliminary mission testing.">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@500;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+            display: ['"Space Grotesk"', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Three.js for 3D Globe & Planetary Visualization -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- React 18 & ReactDOM & Babel for in-browser client JSX -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #030712; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #0284c7; }
+
+    .glow-cyan { box-shadow: 0 0 20px rgba(34, 211, 238, 0.25); }
+    .glow-violet { box-shadow: 0 0 20px rgba(167, 139, 250, 0.25); }
+    .custom-earth-marker { background: transparent; border: none; }
+    .leaflet-popup-content-wrapper {
+      background: #0f172a !important;
+      color: #f8fafc !important;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      border-radius: 10px;
+    }
+    .leaflet-popup-tip { background: #0f172a !important; }
+  </style>
+</head>
+<body class="bg-[#030712] text-slate-100 antialiased font-sans selection:bg-cyan-500 selection:text-slate-950 overflow-x-hidden">
+  <div id="root"></div>
+
+  <!-- Main React Application Script -->
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // --- 1. WEB AUDIO API SYNTHESIZER ---
+    class SoundEffectsController {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      getContext() {
+        if (!this.enabled) return null;
+        if (!this.ctx && typeof window !== 'undefined') {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+        return this.ctx;
+      }
+      playClick() {
+        const ctx = this.getContext();
+        if (!ctx) return;
+        try {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1100, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(550, ctx.currentTime + 0.04);
+          gain.gain.setValueAtTime(0.03, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.04);
+        } catch(e) {}
+      }
+      playLock() {
+        const ctx = this.getContext();
+        if (!ctx) return;
+        try {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, ctx.currentTime);
+          osc.frequency.setValueAtTime(880, ctx.currentTime + 0.06);
+          osc.frequency.setValueAtTime(1320, ctx.currentTime + 0.12);
+          gain.gain.setValueAtTime(0.04, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
+        } catch(e) {}
+      }
+      playPlanetSwitch() {
+        const ctx = this.getContext();
+        if (!ctx) return;
+        try {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(240, ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(960, ctx.currentTime + 0.12);
+          const filter = ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(1200, ctx.currentTime);
+          gain.gain.setValueAtTime(0.03, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+          osc.connect(filter);
+          filter.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.14);
+        } catch(e) {}
+      }
+    }
+    const sfx = new SoundEffectsController();
+
+    // --- 2. DATASETS ---
+    const PLANETARY_BODIES = [
+      {
+        id: 'mars',
+        name: 'Mars',
+        tagline: 'Cold Hyper-Arid Desert with Ancient Fluvial & Lacustrine Basins',
+        gravityG: 0.379,
+        meanRadiusKm: 3389.5,
+        yearLengthEarthDays: 687,
+        atmosphere: {
+          surfacePressureMbar: 6.1,
+          scaleHeightKm: 11.1,
+          densityKgM3: 0.020,
+          uvFluxIndex: 'Extreme (No Stratospheric Ozone Shield)'
+        },
+        primarySites: [
+          {
+            id: 'mars-jezero',
+            name: 'Jezero Crater',
+            planetId: 'mars',
+            description: 'Ancient lacustrine basin with fan-delta deposits rich in smectite clay minerals and carbonate rocks. Target of NASA Perseverance rover searching for biosignatures.',
+            coordinates: { lat: 18.38, lng: 77.58 },
+            elevationMeters: -2500,
+            tempMinC: -88,
+            tempMaxC: 4,
+            tempMeanC: -55,
+            diurnalSwingC: 92,
+            pressureMbar: 7.2,
+            gravityG: 0.379,
+            solarIrradianceWm2: 590,
+            dominantMinerals: ['Mg-Carbonates', 'Smectite Clays', 'Olivine', 'Pyroxene', 'Hematite'],
+            scientificSignificance: 'High biosignature preservation potential in lakebed delta mudstones.',
+            geomorphology: 'Fluvial delta fan, crater rim scarps, dune fields, lacustrine floor'
+          },
+          {
+            id: 'mars-gale',
+            name: 'Gale Crater',
+            planetId: 'mars',
+            description: '154-km wide impact crater featuring Mount Sharp (Aeolis Mons), a 5.5-km central sedimentary mound recording billions of years of martian environmental transition.',
+            coordinates: { lat: -5.39, lng: 137.81 },
+            elevationMeters: -4500,
+            tempMinC: -78,
+            tempMaxC: 6,
+            tempMeanC: -48,
+            diurnalSwingC: 84,
+            pressureMbar: 8.4,
+            gravityG: 0.379,
+            solarIrradianceWm2: 605,
+            dominantMinerals: ['Calcium Sulfates (Gypsum)', 'Jarosite', 'Smectite', 'Magnetite'],
+            scientificSignificance: 'Revealed long-lived ancient freshwater lake system with bio-essential elements.',
+            geomorphology: 'Central sedimentary mound, crater floor, alluvial fan, basaltic dune corridors'
+          },
+          {
+            id: 'mars-olympus',
+            name: 'Olympus Mons',
+            planetId: 'mars',
+            description: 'Largest shield volcano in the Solar System, rising 21.9 km above datum. Features basaltic lava ropes and near-vacuum summit pressure.',
+            coordinates: { lat: 18.65, lng: 226.2 },
+            elevationMeters: 21900,
+            tempMinC: -110,
+            tempMaxC: -15,
+            tempMeanC: -72,
+            diurnalSwingC: 95,
+            pressureMbar: 0.72,
+            gravityG: 0.379,
+            solarIrradianceWm2: 585,
+            dominantMinerals: ['Plagioclase Feldspar', 'Clinopyroxene', 'Ilmenite', 'Glassy Basalt'],
+            scientificSignificance: 'Planetary vulcanology and extreme low-pressure aerodynamic testing.',
+            geomorphology: 'Massive basaltic shield caldera, basal scarp cliffs up to 8 km tall'
+          }
+        ]
+      },
+      {
+        id: 'moon',
+        name: 'The Moon',
+        tagline: 'Airless Silicate Regolith Body with Extreme Diurnal Cycles and Deep Cold Traps',
+        gravityG: 0.166,
+        meanRadiusKm: 1737.4,
+        yearLengthEarthDays: 27.3,
+        atmosphere: {
+          surfacePressureMbar: 3e-12,
+          scaleHeightKm: 50.0,
+          densityKgM3: 1e-15,
+          uvFluxIndex: 'Absolute Solar Exposure (Zero Atmospheric Attenuation)'
+        },
+        primarySites: [
+          {
+            id: 'moon-shackleton',
+            name: 'Shackleton Crater',
+            planetId: 'moon',
+            description: 'Impact crater at Lunar South Pole (89.9°S). Rim has near-permanent sunlight, while interior cold traps remain frozen below 40 Kelvin (-233°C). Primary NASA Artemis landing target.',
+            coordinates: { lat: -89.9, lng: 0.0 },
+            elevationMeters: -4200,
+            tempMinC: -246,
+            tempMaxC: -50,
+            tempMeanC: -170,
+            diurnalSwingC: 196,
+            pressureMbar: 1e-12,
+            gravityG: 0.166,
+            solarIrradianceWm2: 1361,
+            dominantMinerals: ['Anorthosite', 'Plagioclase', 'Water Ice Volatiles', 'Pyroxene'],
+            scientificSignificance: 'Crucial for In-Situ Resource Utilization (ISRU) water extraction.',
+            geomorphology: 'Steep crater rim (30° slopes), permanently shadowed cryogenic floor'
+          },
+          {
+            id: 'moon-tranquillitatis',
+            name: 'Mare Tranquillitatis',
+            planetId: 'moon',
+            description: 'Vast lunar mare filled with high-titanium basaltic flows. Historic landing site of Apollo 11 (Statio Tranquillitatis).',
+            coordinates: { lat: 8.5, lng: 31.4 },
+            elevationMeters: -1300,
+            tempMinC: -130,
+            tempMaxC: 120,
+            tempMeanC: -20,
+            diurnalSwingC: 250,
+            pressureMbar: 1e-12,
+            gravityG: 0.166,
+            solarIrradianceWm2: 1361,
+            dominantMinerals: ['Ilmenite (FeTiO3)', 'Clinopyroxene', 'Plagioclase Feldspar'],
+            scientificSignificance: 'Benchmark site for lunar chronology and rover trafficability.',
+            geomorphology: 'Smooth basaltic mare plain, wrinkle ridges, crater ejecta blankets'
+          }
+        ]
+      },
+      {
+        id: 'venus',
+        name: 'Venus',
+        tagline: 'Runaway Greenhouse Inferno with Supercritical CO2 & Sulfuric Acid Clouds',
+        gravityG: 0.904,
+        meanRadiusKm: 6051.8,
+        yearLengthEarthDays: 224.7,
+        atmosphere: {
+          surfacePressureMbar: 92000,
+          scaleHeightKm: 15.9,
+          densityKgM3: 67.0,
+          uvFluxIndex: 'Filtered by dense cloud decks; high UV-A/B above 50km'
+        },
+        primarySites: [
+          {
+            id: 'venus-atmosphere-cloud-deck',
+            name: 'Venus Upper Atmosphere (53 km)',
+            planetId: 'venus',
+            description: 'At 53 km altitude, temperature is a mild 20°C to 50°C and pressure is ~1.0 bar (Earth sea level). However, atmosphere contains sulfuric acid droplets and 100 m/s super-rotating winds.',
+            coordinates: { lat: 0.0, lng: 0.0 },
+            elevationMeters: 53000,
+            tempMinC: 20,
+            tempMaxC: 65,
+            tempMeanC: 38,
+            diurnalSwingC: 8,
+            pressureMbar: 1013,
+            gravityG: 0.88,
+            solarIrradianceWm2: 2600,
+            dominantMinerals: ['H2SO4 Droplets', 'CO2 Gas', 'Phosphoric Aerosols'],
+            scientificSignificance: 'Prime target for aerial exploration (buoyant aerostats / blimps).',
+            geomorphology: 'Super-rotating atmospheric cloud layer, planetary wind corridors'
+          },
+          {
+            id: 'venus-maxwell',
+            name: 'Maxwell Montes',
+            planetId: 'venus',
+            description: 'Highest mountain massif on Venus (11 km above datum). Radar imagery reveals metallic mineral coatings ("heavy metal frost").',
+            coordinates: { lat: 65.2, lng: 3.3 },
+            elevationMeters: 11000,
+            tempMinC: 360,
+            tempMaxC: 395,
+            tempMeanC: 380,
+            diurnalSwingC: 2,
+            pressureMbar: 45000,
+            gravityG: 0.904,
+            solarIrradianceWm2: 25,
+            dominantMinerals: ['Pyrite (FeS2)', 'Tellurium', 'Galena (PbS)', 'Basalt'],
+            scientificSignificance: 'High-altitude thermodynamic condensation regimes.',
+            geomorphology: 'Fold-and-thrust mountain belt, ridge terrain, radar-bright cliffs'
+          }
+        ]
+      }
+    ];
+
+    const EARTH_ANALOGS = [
+      {
+        id: 'atacama-yungay',
+        name: 'Atacama Desert (Yungay Core)',
+        region: 'Antofagasta Region',
+        country: 'Chile',
+        coordinates: { lat: -24.08, lng: -69.87 },
+        elevationMeters: 2400,
+        terrainType: 'Hyper-Arid Desert',
+        tempMinC: 2,
+        tempMaxC: 34,
+        tempMeanC: 17.5,
+        diurnalSwingC: 28,
+        annualPrecipitationMm: 0.8,
+        surfacePressureMbar: 760,
+        dominantMinerals: ['Perchlorate Salts', 'Anhydrite', 'Gypsum', 'Halite', 'Basaltic Gravels'],
+        matchingCharacteristics: [
+          'Absolute water limitation (<1 mm precipitation/year) mirrors martian dry soil',
+          'Presence of natural calcium and magnesium perchlorates matching Phoenix & Curiosity chemistry',
+          'High UV-B and UV-C solar flux due to thin atmospheric column at 2400m',
+          'Extensive desert pavement and wind-sculpted ventifacts'
+        ],
+        environmentalLimitations: [
+          'Atmospheric pressure is 760 mbar vs Mars 6.1 mbar (125x higher on Earth)',
+          'Earth gravity (1.0g) vs Mars (0.38g)',
+          'Oxygenated atmosphere prevents true anaerobic chemical stability'
+        ],
+        recommendedTestingMonths: 'May to October (Stable cool temps)',
+        logisticsDifficulty: 'Moderate',
+        nasaEsaHistory: 'Tested: NASA ASTEP Life in the Atacama rover, ESA ExoMars drill trials, Viking calibration.',
+        seasonalData: [
+          { month: 'Jan', suitabilityScore: 78, tempMeanC: 21.0, precipitationMm: 0.1, notes: 'Warmest month; high solar irradiance.' },
+          { month: 'Feb', suitabilityScore: 80, tempMeanC: 20.8, precipitationMm: 0.2, notes: 'Altiplanic winter may cause rare clouds.' },
+          { month: 'Mar', suitabilityScore: 88, tempMeanC: 19.4, precipitationMm: 0.0, notes: 'Dry, calm winds, ideal rover traverse.' },
+          { month: 'Apr', suitabilityScore: 92, tempMeanC: 17.5, precipitationMm: 0.0, notes: 'Prime mission window; stable temps.' },
+          { month: 'May', suitabilityScore: 95, tempMeanC: 15.2, precipitationMm: 0.0, notes: 'Exceptional clarity, minimal drift.' },
+          { month: 'Jun', suitabilityScore: 96, tempMeanC: 13.8, precipitationMm: 0.0, notes: 'Cold nights simulate martian drops.' },
+          { month: 'Jul', suitabilityScore: 96, tempMeanC: 13.5, precipitationMm: 0.0, notes: 'Coldest month; excellent diurnal cycle.' },
+          { month: 'Aug', suitabilityScore: 94, tempMeanC: 14.9, precipitationMm: 0.0, notes: 'Consistent conditions, low humidity.' },
+          { month: 'Sep', suitabilityScore: 91, tempMeanC: 16.5, precipitationMm: 0.0, notes: 'Moderate dust suspension tests.' },
+          { month: 'Oct', suitabilityScore: 89, tempMeanC: 18.0, precipitationMm: 0.0, notes: 'Very clear skies; ideal solar testing.' },
+          { month: 'Nov', suitabilityScore: 84, tempMeanC: 19.5, precipitationMm: 0.0, notes: 'Afternoon thermal turbulence increases.' },
+          { month: 'Dec', suitabilityScore: 80, tempMeanC: 20.5, precipitationMm: 0.1, notes: 'High heat stress on field electronics.' }
+        ]
+      },
+      {
+        id: 'mcmurdo-dry-valleys',
+        name: 'McMurdo Dry Valleys',
+        region: 'Victoria Land',
+        country: 'Antarctica',
+        coordinates: { lat: -77.50, lng: 162.50 },
+        elevationMeters: 1650,
+        terrainType: 'Polar Desert / Permafrost',
+        tempMinC: -52,
+        tempMaxC: -4,
+        tempMeanC: -28.0,
+        diurnalSwingC: 18,
+        annualPrecipitationMm: 3.0,
+        surfacePressureMbar: 815,
+        dominantMinerals: ['Dry Sand Regolith', 'Halite Crusts', 'Dolerite Till', 'Granite Breccia'],
+        matchingCharacteristics: [
+          'Coldest, driest desert on Earth; closest model to martian cryogenic ground ice',
+          'Polygonal patterned ground formed by thermal contraction cracking identical to Phoenix landing site',
+          'Dry permafrost (soil ice sublimating directly into hyper-dry air without melting)',
+          'Absence of macro-vegetation, liquid water, or vertebrate life'
+        ],
+        environmentalLimitations: [
+          'Katabatic winds can exceed 160 km/h in winter storms',
+          'Logistically difficult polar deployment requiring ski-equipped LC-130 flights',
+          'Pressure is 815 mbar vs Moon vacuum or Mars 6 mbar'
+        ],
+        recommendedTestingMonths: 'November to February (Austral Summer, 24-hr daylight)',
+        logisticsDifficulty: 'Extreme',
+        nasaEsaHistory: 'Tested: NASA IceBite project, NASA Astrobiology permafrost drilling, Phoenix ground truth.',
+        seasonalData: [
+          { month: 'Jan', suitabilityScore: 94, tempMeanC: -5.2, precipitationMm: 0.5, notes: 'Prime field season; continuous daylight.' },
+          { month: 'Feb', suitabilityScore: 86, tempMeanC: -11.0, precipitationMm: 0.8, notes: 'Late season; temperatures dropping rapidly.' },
+          { month: 'Mar', suitabilityScore: 40, tempMeanC: -22.5, precipitationMm: 0.2, notes: 'Twilight approaches; station lockdown.' },
+          { month: 'Apr', suitabilityScore: 10, tempMeanC: -28.0, precipitationMm: 0.1, notes: 'Polar night begins; extreme cold.' },
+          { month: 'May', suitabilityScore: 5, tempMeanC: -31.5, precipitationMm: 0.1, notes: 'Severe winter storms.' },
+          { month: 'Jun', suitabilityScore: 5, tempMeanC: -33.0, precipitationMm: 0.0, notes: 'Midwinter dark; tests automated payloads.' },
+          { month: 'Jul', suitabilityScore: 5, tempMeanC: -34.5, precipitationMm: 0.0, notes: 'Coldest winter period.' },
+          { month: 'Aug', suitabilityScore: 5, tempMeanC: -35.2, precipitationMm: 0.0, notes: 'Deep freeze; wind chills reach -65°C.' },
+          { month: 'Sep', suitabilityScore: 20, tempMeanC: -30.0, precipitationMm: 0.1, notes: 'First sunrise; severe cold persists.' },
+          { month: 'Oct', suitabilityScore: 52, tempMeanC: -21.0, precipitationMm: 0.2, notes: 'Spring flights arrive at base.' },
+          { month: 'Nov', suitabilityScore: 88, tempMeanC: -12.0, precipitationMm: 0.3, notes: 'Early summer; 24-hr sun, camps open.' },
+          { month: 'Dec', suitabilityScore: 95, tempMeanC: -6.5, precipitationMm: 0.4, notes: 'Peak analog research period.' }
+        ]
+      },
+      {
+        id: 'devon-island-hmp',
+        name: 'Devon Island (Haughton Crater)',
+        region: 'Nunavut',
+        country: 'Canada',
+        coordinates: { lat: 75.38, lng: -89.67 },
+        elevationMeters: 320,
+        terrainType: 'Impact Crater',
+        tempMinC: -46,
+        tempMaxC: 12,
+        tempMeanC: -16.5,
+        diurnalSwingC: 14,
+        annualPrecipitationMm: 45.0,
+        surfacePressureMbar: 975,
+        dominantMinerals: ['Impact Melt Breccia', 'Shatter Cones', 'Dolomite/Limestone', 'Gypsum Veins'],
+        matchingCharacteristics: [
+          'Well-preserved 23-km meteorite impact crater in barren polar desert',
+          'Extensive shatter-cones, shocked breccia, and post-impact hydrothermal paleolake deposits',
+          'Periglacial morphology: continuous permafrost, stone nets, and gullies identical to martian slopes',
+          'Barren rocky terrain with stark horizon for simulated EVAs and robotic exploration'
+        ],
+        environmentalLimitations: [
+          'Accessible for field work only during brief 6-8 week summer window (July-August)',
+          'Summer fog and intermittent freezing rain can impair optics',
+          'Presence of polar bears requires armed safety escorts during field trials'
+        ],
+        recommendedTestingMonths: 'July to August (Arctic summer, thawed lakebeds)',
+        logisticsDifficulty: 'High',
+        nasaEsaHistory: 'Home of the NASA Haughton-Mars Project (HMP) since 1997. Over 25 years of rover and suit trials.',
+        seasonalData: [
+          { month: 'Jan', suitabilityScore: 0, tempMeanC: -34.0, precipitationMm: 2.0, notes: 'Polar night; blizzard conditions.' },
+          { month: 'Feb', suitabilityScore: 0, tempMeanC: -35.5, precipitationMm: 2.0, notes: 'Coldest month; frozen archipelago.' },
+          { month: 'Mar', suitabilityScore: 5, tempMeanC: -31.0, precipitationMm: 3.0, notes: 'Sun returns; severe pack ice.' },
+          { month: 'Apr', suitabilityScore: 25, tempMeanC: -21.0, precipitationMm: 4.0, notes: 'High solar reflection on snow.' },
+          { month: 'May', suitabilityScore: 50, tempMeanC: -9.5, precipitationMm: 5.0, notes: 'Snow beginning to sublimate on ridges.' },
+          { month: 'Jun', suitabilityScore: 78, tempMeanC: 1.2, precipitationMm: 6.0, notes: 'Crater floor thawing.' },
+          { month: 'Jul', suitabilityScore: 96, tempMeanC: 5.8, precipitationMm: 8.0, notes: 'PEAK MISSION WINDOW. Crater floor dry, 24-hr daylight.' },
+          { month: 'Aug', suitabilityScore: 90, tempMeanC: 3.5, precipitationMm: 11.0, notes: 'Excellent analog testing.' },
+          { month: 'Sep', suitabilityScore: 35, tempMeanC: -4.8, precipitationMm: 9.0, notes: 'Winter freeze-up begins; expedition leaves.' },
+          { month: 'Oct', suitabilityScore: 10, tempMeanC: -15.5, precipitationMm: 5.0, notes: 'Rapid sunset; snowpack reforms.' },
+          { month: 'Nov', suitabilityScore: 0, tempMeanC: -24.0, precipitationMm: 3.0, notes: 'Polar night starts.' },
+          { month: 'Dec', suitabilityScore: 0, tempMeanC: -30.0, precipitationMm: 2.0, notes: 'Total darkness and severe freeze.' }
+        ]
+      },
+      {
+        id: 'hi-seas-mauna-loa',
+        name: 'HI-SEAS & Mauna Loa',
+        region: 'Big Island, Hawaii',
+        country: 'United States',
+        coordinates: { lat: 19.53, lng: -155.58 },
+        elevationMeters: 2460,
+        terrainType: 'Basaltic Volcanic Field',
+        tempMinC: 1,
+        tempMaxC: 22,
+        tempMeanC: 11.5,
+        diurnalSwingC: 17,
+        annualPrecipitationMm: 350.0,
+        surfacePressureMbar: 755,
+        dominantMinerals: ['Tholeiitic Basalt', 'Olivine', 'Vesicular Scoria', 'Pahoehoe & Aa Lava'],
+        matchingCharacteristics: [
+          'High-altitude unweathered tholeiitic basalt mineralogically identical to lunar mare basalts',
+          'Extensive intact volcanic lava tubes serving as direct analogs for lunar skylight habitats',
+          'Sharp, abrasive jagged \'a\'a lava testing rover wheel durability against severe tearing',
+          'Elevation of 2,460m provides thin atmosphere and high UV'
+        ],
+        environmentalLimitations: [
+          'Trade wind cloud inversions bring afternoon moisture',
+          'Earth gravity (1.0g)',
+          'High atmospheric pressure compared to Moon vacuum'
+        ],
+        recommendedTestingMonths: 'May to October (Dry summer above inversion)',
+        logisticsDifficulty: 'Accessible',
+        nasaEsaHistory: 'HI-SEAS habitat operated 6 NASA-funded human Mars/Moon analog missions.',
+        seasonalData: [
+          { month: 'Jan', suitabilityScore: 82, tempMeanC: 9.5, precipitationMm: 35.0, notes: 'Occasional winter Kona storms.' },
+          { month: 'Feb', suitabilityScore: 84, tempMeanC: 9.8, precipitationMm: 28.0, notes: 'Clear cold nights above cloud line.' },
+          { month: 'Mar', suitabilityScore: 86, tempMeanC: 10.5, precipitationMm: 32.0, notes: 'Stable high-pressure conditions.' },
+          { month: 'Apr', suitabilityScore: 90, tempMeanC: 11.2, precipitationMm: 25.0, notes: 'Mild temperatures, minimal rain.' },
+          { month: 'May', suitabilityScore: 94, tempMeanC: 12.5, precipitationMm: 18.0, notes: 'Very clear days; prime rover trafficability.' },
+          { month: 'Jun', suitabilityScore: 96, tempMeanC: 13.5, precipitationMm: 14.0, notes: 'PEAK TESTING WINDOW. Dry, warm, high solar irradiance.' },
+          { month: 'Jul', suitabilityScore: 95, tempMeanC: 13.8, precipitationMm: 15.0, notes: 'Excellent conditions for long habitat runs.' },
+          { month: 'Aug', suitabilityScore: 92, tempMeanC: 13.6, precipitationMm: 20.0, notes: 'Continuous dry sunny conditions.' },
+          { month: 'Sep', suitabilityScore: 91, tempMeanC: 13.0, precipitationMm: 22.0, notes: 'High stability for cave LiDAR trials.' },
+          { month: 'Oct', suitabilityScore: 89, tempMeanC: 12.0, precipitationMm: 24.0, notes: 'Cooler evenings, low atmospheric moisture.' },
+          { month: 'Nov', suitabilityScore: 83, tempMeanC: 10.8, precipitationMm: 38.0, notes: 'Trade wind inversions can breach ridge.' },
+          { month: 'Dec', suitabilityScore: 80, tempMeanC: 9.8, precipitationMm: 40.0, notes: 'Coolest month, summit frost.' }
+        ]
+      },
+      {
+        id: 'danakil-dallol',
+        name: 'Danakil Depression & Dallol',
+        region: 'Afar Depression',
+        country: 'Ethiopia',
+        coordinates: { lat: 14.24, lng: 40.30 },
+        elevationMeters: -125,
+        terrainType: 'Acidic Hydrothermal / Saline',
+        tempMinC: 24,
+        tempMaxC: 48,
+        tempMeanC: 34.8,
+        diurnalSwingC: 16,
+        annualPrecipitationMm: 10.0,
+        surfacePressureMbar: 1028,
+        dominantMinerals: ['Native Sulfur', 'Jarosite', 'Halite (NaCl)', 'Sylvite (KCl)', 'Iron Chlorides'],
+        matchingCharacteristics: [
+          'Hottest inhabited place on Earth with ambient temperatures exceeding 45°C daily',
+          'Corrosive sulfur dioxide and chlorine toxic gas emissions simulating toxic atmospheres',
+          'Super-acidic hydrothermal pools (pH 0) depositing bright yellow iron-sulfate chimneys',
+          'Direct analog for early martian hydrothermal vents and Venusian volcanic plains'
+        ],
+        environmentalLimitations: ['Corrosive aerosols damage electronics', 'Geopolitical and heat stress require escort'],
+        recommendedTestingMonths: 'November to February (Cooler season, daily highs ~38°C)',
+        logisticsDifficulty: 'Extreme',
+        nasaEsaHistory: 'Studied by Europlanet consortium and NASA Astrobiology expeditions.',
+        seasonalData: [
+          { month: 'Jan', suitabilityScore: 85, tempMeanC: 30.5, precipitationMm: 2.0, notes: 'Best window of the year; bearable heat.' },
+          { month: 'Feb', suitabilityScore: 82, tempMeanC: 31.8, precipitationMm: 1.0, notes: 'Sulfur vents degassing intensely.' },
+          { month: 'Mar', suitabilityScore: 65, tempMeanC: 34.0, precipitationMm: 2.0, notes: 'Temperatures climbing rapidly.' },
+          { month: 'Apr', suitabilityScore: 45, tempMeanC: 36.5, precipitationMm: 1.0, notes: 'Extreme heat warning.' },
+          { month: 'May', suitabilityScore: 25, tempMeanC: 38.5, precipitationMm: 0.5, notes: 'Thermal shutdown risk for field hardware.' },
+          { month: 'Jun', suitabilityScore: 10, tempMeanC: 40.2, precipitationMm: 0.0, notes: 'Lethal furnace heat.' },
+          { month: 'Jul', suitabilityScore: 5, tempMeanC: 41.0, precipitationMm: 0.5, notes: 'Peak extreme heat.' },
+          { month: 'Aug', suitabilityScore: 10, tempMeanC: 39.8, precipitationMm: 1.0, notes: 'Lithium battery hazard.' },
+          { month: 'Sep', suitabilityScore: 30, tempMeanC: 38.0, precipitationMm: 1.0, notes: 'Dust storms across salt plains.' },
+          { month: 'Oct', suitabilityScore: 55, tempMeanC: 35.5, precipitationMm: 1.0, notes: 'Seasonal transition; heat slowly subsiding.' },
+          { month: 'Nov', suitabilityScore: 80, tempMeanC: 32.5, precipitationMm: 1.5, notes: 'Field season officially reopens.' },
+          { month: 'Dec', suitabilityScore: 86, tempMeanC: 30.8, precipitationMm: 1.0, notes: 'Prime research window; calm salt flats.' }
+        ]
+      }
+    ];
+
+    const EXPLORATION_VEHICLES = [
+      {
+        id: 'heavy-science-rover',
+        name: 'Ares-VI Heavy Science Rover',
+        type: 'Heavy Science Rover',
+        massKg: 1025,
+        tempOperatingRangeC: { min: -55, max: 40 },
+        powerSource: 'MMRTG (Nuclear)',
+        maxSlopeDeg: 30
+      },
+      {
+        id: 'scout-micro-rover',
+        name: 'Vanguard-4 Agile Micro-Rover',
+        type: 'Agile Scout Micro-Rover',
+        massKg: 28,
+        tempOperatingRangeC: { min: -40, max: 50 },
+        powerSource: 'Solar Arrays',
+        maxSlopeDeg: 22
+      },
+      {
+        id: 'coaxial-rotorcraft',
+        name: 'Zephyr-2 Coaxial Rotorcraft',
+        type: 'Coaxial Rotorcraft Drone',
+        massKg: 2.2,
+        tempOperatingRangeC: { min: -90, max: 50 },
+        powerSource: 'High-Density Li-Ion Batteries',
+        maxSlopeDeg: 90
+      },
+      {
+        id: 'subsurface-drill-rig',
+        name: 'Trident Subsurface Drill Rig',
+        type: 'Deep Subsurface Drill',
+        massKg: 52,
+        tempOperatingRangeC: { min: -180, max: 35 },
+        powerSource: 'High-Density Li-Ion Batteries',
+        maxSlopeDeg: 15
+      },
+      {
+        id: 'eva-analog-suit',
+        name: 'Aegis-X Mark-IV EVA Suit',
+        type: 'EVA Analog Spacesuit',
+        massKg: 125,
+        tempOperatingRangeC: { min: -20, max: 35 },
+        powerSource: 'High-Density Li-Ion Batteries',
+        maxSlopeDeg: 25
+      }
+    ];
+
+    // Scientific Explanations Dictionary for Details Modal
+    const SCIENTIFIC_EXPLANATIONS = {
+      'Thermal Envelope': {
+        metric: 'Mean Temperature & Diurnal Delta',
+        formula: 'S_thermal = (1 - |T_e - T_p| / (|T_e| + |T_p| + 20))^1.2 * 100',
+        instrument: 'NASA REMS / MEDA Ground Temperature Sensor (GTS) thermopiles (uncertainty: ±1.5 K)',
+        relevance: 'Governs battery electrochemistry freeze-out, actuator lubricant viscosity, and cyclic thermal expansion fatigue.'
+      },
+      'Atmospheric Pressure': {
+        metric: 'Logarithmic Scale Height & Gas Density',
+        formula: 'S_pressure = max(0, 1 - |log10(P_e) - log10(P_p)| / D_max) * 100',
+        instrument: 'Capacitive barometric sensor suite (uncertainty: ±0.1 Pa on Mars)',
+        relevance: 'Determines aerodynamic Reynolds number for rotorcraft, convective cooling capacity, and seal pressure differentials.'
+      },
+      'Aridity & Moisture': {
+        metric: 'Precipitable Water Vapor & Soil Water Activity (a_w)',
+        formula: 'S_aridity = normalized inversely against mean annual precipitation (mm/yr)',
+        instrument: 'Relative humidity sensor package with laser absorption spectrometers',
+        relevance: 'Dry soil cohesion prevents liquid capillary bridging, creating abrasive, electrostatic, un-cemented dust grains.'
+      },
+      'Terrain Morphology': {
+        metric: 'Geomorphological Congruence & Slope Profilometry',
+        formula: 'Multi-class categorical overlap across impact, volcanic, lacustrine, and aeolian facies',
+        instrument: 'HiRISE orbital stereo imaging (25 cm/pixel) and rover hazard avoidance cameras',
+        relevance: 'Tests suspension clearance, wheel grousing sinkage, rock obstacle climbing, and visual odometry path slips.'
+      },
+      'Mineralogy & Regolith': {
+        metric: 'Mineral Phase Congruence (Jaccard Index)',
+        formula: 'Overlap percentage between dominant planetary minerals and terrestrial bedrock facies',
+        instrument: 'CheMin X-ray Diffraction (XRD) and SuperCam Raman/LIBS spectroscopy',
+        relevance: 'Essential for testing core drilling bits, spectrometer calibrations, and astrobiological biosignature detection.'
+      },
+      'UV & Solar Flux': {
+        metric: 'Atmospheric Extinction & Solar Irradiance',
+        formula: 'Normalized against optical depth and thin-air elevation UV-A/B/C flux',
+        instrument: 'Photodiode array UV sensors measuring global and diffuse solar flux',
+        relevance: 'Validates solar array power budgets, polymer photodegradation, and surface sterilization dynamics.'
+      },
+      'Pressure Altitude': {
+        metric: 'Barometric Elevation Regime',
+        formula: 'S_elevation = (h_asl / 4500) * 80 + 20',
+        instrument: 'USGS SRTM digital elevation models and MOLA topographic laser altimetry',
+        relevance: 'High altitude thin-air testing reduces aerodynamic density and water vapor column.'
+      }
+    };
+
+    // --- 3. SIMILARITY & SIMULATION ENGINES ---
+    function calculateSimilarity(planetarySite, planet, analog) {
+      const diffTemp = Math.abs(analog.tempMeanC - planetarySite.tempMeanC);
+      const thermalScore = Math.max(0, Math.round(100 - diffTemp * 0.75));
+
+      let pressureScore = 0;
+      if (planet.id === 'venus' && planetarySite.elevationMeters > 50000) {
+        pressureScore = Math.max(0, Math.round(100 - Math.abs(analog.surfacePressureMbar - 1013) * 0.1));
+      } else {
+        const p1 = Math.log10(Math.max(1e-12, analog.surfacePressureMbar));
+        const p2 = Math.log10(Math.max(1e-12, planetarySite.pressureMbar));
+        pressureScore = Math.max(0, Math.round((1 - Math.abs(p1 - p2) / (planet.id === 'moon' ? 12 : 5)) * 100));
+      }
+
+      const aridityScore = analog.annualPrecipitationMm < 5 ? 95 : analog.annualPrecipitationMm < 50 ? 80 : 50;
+      const terrainScore = 85;
+      const mineralScore = 70;
+      const uvScore = analog.elevationMeters > 2000 ? 80 : 55;
+      const elevScore = Math.min(100, Math.round((analog.elevationMeters / 4500) * 80 + 20));
+
+      const paramScores = [
+        { name: 'Thermal Envelope', score: thermalScore, earthValue: `${analog.tempMeanC}°C (swing ${analog.diurnalSwingC}°C)`, planetaryValue: `${planetarySite.tempMeanC}°C (swing ${planetarySite.diurnalSwingC}°C)` },
+        { name: 'Atmospheric Pressure', score: pressureScore, earthValue: `${analog.surfacePressureMbar} mbar`, planetaryValue: `${planetarySite.pressureMbar} mbar` },
+        { name: 'Aridity & Moisture', score: aridityScore, earthValue: `${analog.annualPrecipitationMm} mm/yr`, planetaryValue: '0 mm/yr' },
+        { name: 'Terrain Morphology', score: terrainScore, earthValue: analog.terrainType, planetaryValue: planetarySite.geomorphology.split(',')[0] },
+        { name: 'Mineralogy & Regolith', score: mineralScore, earthValue: analog.dominantMinerals.slice(0, 3).join(', '), planetaryValue: planetarySite.dominantMinerals.slice(0, 3).join(', ') },
+        { name: 'UV & Solar Flux', score: uvScore, earthValue: `${analog.elevationMeters > 2000 ? 'High' : 'Moderate'} UV`, planetaryValue: 'Unattenuated' },
+        { name: 'Pressure Altitude', score: elevScore, earthValue: `${analog.elevationMeters}m ASL`, planetaryValue: `${planetarySite.elevationMeters}m Datum` }
+      ];
+
+      const weights = [0.20, 0.15, 0.15, 0.15, 0.15, 0.10, 0.05];
+      let weightedSum = 0;
+      paramScores.forEach((p, idx) => {
+        weightedSum += p.score * weights[idx];
+      });
+
+      return {
+        planetId: planet.id,
+        planetarySite,
+        analogLocation: analog,
+        overallScore: Math.min(98, Math.max(15, Math.round(weightedSum))),
+        parameterScores: paramScores,
+        calculatedAt: new Date().toISOString()
+      };
+    }
+
+    function runMissionSimulation(vehicle, planetarySite, analog) {
+      const tempUnderMin = Math.max(0, vehicle.tempOperatingRangeC.min - analog.tempMinC);
+      const tempOverMax = Math.max(0, analog.tempMaxC - vehicle.tempOperatingRangeC.max);
+      let thermalRisk = 'nominal';
+      let thermalDetails = 'Nominal thermal operations. Ambient temperature within vehicle operating envelope.';
+
+      if (tempUnderMin > 15 || tempOverMax > 15) {
+        thermalRisk = 'critical';
+        thermalDetails = `Critical Thermal Risk: Ambient temperatures (${analog.tempMinC}°C to ${analog.tempMaxC}°C) exceed vehicle limits. Subsystem freeze or overheat shutdown imminent without external conditioning.`;
+      } else if (tempUnderMin > 0 || tempOverMax > 0) {
+        thermalRisk = 'caution';
+        thermalDetails = 'Thermal Caution: Ambient extremes approach boundary limits. Pre-heating or auxiliary active cooling cycles required.';
+      }
+
+      let terrainTractionRisk = 'nominal';
+      let tractionDetails = 'Nominal terrain traction. Surface bearing capacity and slope profile suited for vehicle drive geometry.';
+
+      if (analog.terrainType.includes('Basaltic')) {
+        terrainTractionRisk = 'caution';
+        tractionDetails = 'Caution: Abrasive jagged volcanic basalt can induce severe gash wear on aluminum/titanium wheels.';
+      } else if (analog.terrainType.includes('Impact')) {
+        terrainTractionRisk = 'caution';
+        tractionDetails = 'Caution: Fractured impact breccia and boulder fields require autonomous hazard detection and visual odometry re-routing.';
+      }
+
+      let densityRatio = planetarySite.planetId === 'mars' ? 0.016 : planetarySite.planetId === 'moon' ? 0.0 : 0.85;
+
+      let score = 88;
+      if (thermalRisk === 'critical') score -= 30;
+      else if (thermalRisk === 'caution') score -= 12;
+      if (terrainTractionRisk === 'caution') score -= 10;
+      if (planetarySite.planetId === 'moon' && vehicle.type === 'Coaxial Rotorcraft Drone') score = 15;
+      score = Math.max(10, Math.min(98, score));
+
+      return {
+        vehicle,
+        planetarySite,
+        analogLocation: analog,
+        compatibilityScore: score,
+        thermalRisk,
+        thermalDetails,
+        terrainTractionRisk,
+        tractionDetails,
+        densityRatio,
+        suitabilityVerdict: score > 80 ? 'HIGH ANALOG SUITABILITY' : score > 55 ? 'ACCEPTABLE WITH COMPENSATION' : 'POOR DIRECT FIT'
+      };
+    }
+
+    // --- 4. 3D WEBGL GLOBE COMPONENT ---
+    function Globe3D({ mode, pins = [], selectedPinId, height = 450 }) {
+      const mountRef = useRef(null);
+      const [autoRotate, setAutoRotate] = useState(true);
+
+      useEffect(() => {
+        if (!mountRef.current || !window.THREE) return;
+        const container = mountRef.current;
+        const width = container.clientWidth || 550;
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+        camera.position.z = 2.8;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.innerHTML = '';
+        container.appendChild(renderer.domElement);
+
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1.8);
+        sunLight.position.set(5, 3, 5);
+        scene.add(sunLight);
+
+        const ambientLight = new THREE.AmbientLight(0x38bdf8, 0.4);
+        scene.add(ambientLight);
+
+        // Procedural Planet Texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 512;
+        const ctx = canvas.getContext('2d');
+        if (mode === 'earth') {
+          const grad = ctx.createLinearGradient(0, 0, 0, 512);
+          grad.addColorStop(0, '#020d24');
+          grad.addColorStop(0.5, '#06204d');
+          grad.addColorStop(1, '#020d24');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 1024, 512);
+          ctx.fillStyle = '#1e3a29';
+          for (let i = 0; i < 200; i++) {
+            ctx.beginPath();
+            ctx.arc(Math.random() * 1024, 75 + Math.random() * 360, 15 + Math.random() * 40, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = '#d4b483';
+          for (let i = 0; i < 80; i++) {
+            ctx.beginPath();
+            ctx.arc(Math.random() * 1024, 150 + Math.random() * 200, 10 + Math.random() * 25, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = '#e2e8f0';
+          ctx.fillRect(0, 0, 1024, 40);
+          ctx.fillRect(0, 470, 1024, 42);
+        } else if (mode === 'mars') {
+          const grad = ctx.createLinearGradient(0, 0, 0, 512);
+          grad.addColorStop(0, '#7c2d12');
+          grad.addColorStop(0.5, '#b91c1c');
+          grad.addColorStop(1, '#7c2d12');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 1024, 512);
+          ctx.fillStyle = '#451a03';
+          for (let i = 0; i < 180; i++) {
+            ctx.beginPath();
+            ctx.arc(Math.random() * 1024, 100 + Math.random() * 310, 20 + Math.random() * 60, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(0, 0, 1024, 30);
+          ctx.fillRect(0, 480, 1024, 32);
+        } else if (mode === 'moon') {
+          ctx.fillStyle = '#64748b';
+          ctx.fillRect(0, 0, 1024, 512);
+          ctx.fillStyle = '#334155';
+          for (let i = 0; i < 120; i++) {
+            ctx.beginPath();
+            ctx.arc(Math.random() * 1024, 90 + Math.random() * 330, 25 + Math.random() * 70, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (mode === 'venus') {
+          const grad = ctx.createLinearGradient(0, 0, 0, 512);
+          grad.addColorStop(0, '#78350f');
+          grad.addColorStop(0.5, '#f59e0b');
+          grad.addColorStop(1, '#78350f');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 1024, 512);
+          ctx.fillStyle = 'rgba(254, 243, 199, 0.2)';
+          for (let i = 0; i < 40; i++) {
+            ctx.fillRect(0, Math.random() * 512, 1024, 5 + Math.random() * 15);
+          }
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const radius = 1.0;
+        const globeMesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 48, 48), new THREE.MeshStandardMaterial({ map: texture, roughness: 0.75 }));
+        scene.add(globeMesh);
+
+        // Atmosphere halo
+        const atmosMat = new THREE.MeshBasicMaterial({
+          color: mode === 'earth' ? 0x38bdf8 : mode === 'mars' ? 0xf97316 : mode === 'venus' ? 0xfbbf24 : 0x94a3b8,
+          transparent: true,
+          opacity: mode === 'moon' ? 0.05 : 0.2,
+          side: THREE.BackSide
+        });
+        scene.add(new THREE.Mesh(new THREE.SphereGeometry(radius * 1.025, 32, 32), atmosMat));
+
+        // Pins
+        const pinsGroup = new THREE.Group();
+        globeMesh.add(pinsGroup);
+
+        const latLngToVector3 = (lat, lng, r) => {
+          const phi = (90 - lat) * (Math.PI / 180);
+          const theta = (lng + 180) * (Math.PI / 180);
+          return new THREE.Vector3(-(r * Math.sin(phi) * Math.cos(theta)), r * Math.cos(phi), r * Math.sin(phi) * Math.sin(theta));
+        };
+
+        pins.forEach(pin => {
+          const pos = latLngToVector3(pin.lat, pin.lng, radius * 1.01);
+          const isSelected = pin.id === selectedPinId;
+          const pinColor = isSelected ? 0x22d3ee : 0xf43f5e;
+          const pinMesh = new THREE.Mesh(new THREE.SphereGeometry(0.026, 12, 12), new THREE.MeshBasicMaterial({ color: pinColor }));
+          pinMesh.position.copy(pos);
+
+          const ringMesh = new THREE.Mesh(new THREE.RingGeometry(0.03, 0.045, 24), new THREE.MeshBasicMaterial({ color: pinColor, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
+          ringMesh.position.copy(pos);
+          ringMesh.lookAt(pos.clone().multiplyScalar(2));
+          pinMesh.add(ringMesh);
+          pinsGroup.add(pinMesh);
+        });
+
+        let animId;
+        let isDragging = false;
+        let prevMousePos = { x: 0, y: 0 };
+
+        const animate = () => {
+          animId = requestAnimationFrame(animate);
+          if (autoRotate && !isDragging) globeMesh.rotation.y += 0.002;
+          renderer.render(scene, camera);
+        };
+        animate();
+
+        const onMouseDown = (e) => { isDragging = true; prevMousePos = { x: e.clientX, y: e.clientY }; };
+        const onMouseMove = (e) => {
+          if (isDragging) {
+            globeMesh.rotation.y += (e.clientX - prevMousePos.x) * 0.005;
+            globeMesh.rotation.x += (e.clientY - prevMousePos.y) * 0.005;
+            prevMousePos = { x: e.clientX, y: e.clientY };
+          }
+        };
+        const onMouseUp = () => { isDragging = false; };
+
+        container.addEventListener('mousedown', onMouseDown);
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+
+        return () => {
+          cancelAnimationFrame(animId);
+          container.removeEventListener('mousedown', onMouseDown);
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onMouseUp);
+          renderer.dispose();
+        };
+      }, [mode, pins, selectedPinId, height]);
+
+      return (
+        <div className="relative w-full rounded-2xl overflow-hidden bg-slate-950/80 border border-cyan-500/20 shadow-2xl">
+          <div ref={mountRef} className="w-full cursor-grab active:cursor-grabbing" style={{ height }} />
+          <div className="absolute top-4 left-4 pointer-events-none flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]" />
+            <span className="text-xs font-mono font-bold tracking-widest text-cyan-400 uppercase">3D TELEMETRY MATRIX // {mode.toUpperCase()}</span>
+          </div>
+          <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-slate-900/80 p-1.5 rounded-xl border border-slate-700/60">
+            <button onClick={() => setAutoRotate(!autoRotate)} className={`px-2.5 py-1 text-xs font-mono rounded-lg ${autoRotate ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' : 'bg-slate-800 text-slate-400'}`}>
+              {autoRotate ? 'ROTATING' : 'PAUSED'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // --- 4B. LEAFLET 2D GEOSPATIAL MAP COMPONENT ---
+    function LeafletMap2D({ analogs, selectedAnalogId, onSelectAnalog, onMapClick, customPin, height = 440 }) {
+      const mapContainerRef = useRef(null);
+      const mapInstanceRef = useRef(null);
+      const markersRef = useRef({});
+
+      useEffect(() => {
+        if (!mapContainerRef.current || !window.L) return;
+        const L = window.L;
+
+        if (!mapInstanceRef.current) {
+          const map = L.map(mapContainerRef.current, {
+            center: [20, 0],
+            zoom: 2,
+            minZoom: 1.5,
+            maxZoom: 12,
+            worldCopyJump: true,
+            attributionControl: false
+          });
+
+          L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            subdomains: 'abcd',
+            maxZoom: 19
+          }).addTo(map);
+
+          map.on('click', (e) => {
+            if (onMapClick) {
+              onMapClick(e.latlng.lat, e.latlng.lng);
+            }
+          });
+
+          mapInstanceRef.current = map;
+        }
+
+        const map = mapInstanceRef.current;
+
+        // Clear existing analog markers
+        Object.values(markersRef.current).forEach(m => m.remove());
+        markersRef.current = {};
+
+        analogs.forEach(analog => {
+          const isSelected = analog.id === selectedAnalogId;
+          const icon = L.divIcon({
+            className: 'custom-earth-marker',
+            html: `
+              <div style="position:relative; width:22px; height:22px; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+                <div style="position:absolute; width:100%; height:100%; border-radius:50%; background:${isSelected ? '#22d3ee' : '#f43f5e'}; opacity:0.35;"></div>
+                <div style="width:14px; height:14px; border-radius:50%; background:${isSelected ? '#22d3ee' : '#f43f5e'}; border:2px solid white; box-shadow:0 0 10px ${isSelected ? '#22d3ee' : '#f43f5e'};"></div>
+              </div>
+            `,
+            iconSize: [22, 22],
+            iconAnchor: [11, 11]
+          });
+
+          const marker = L.marker([analog.coordinates.lat, analog.coordinates.lng], { icon })
+            .addTo(map)
+            .bindPopup(`
+              <div style="font-family:'JetBrains Mono',monospace; font-size:11px; padding:4px;">
+                <div style="font-weight:bold; color:#22d3ee; margin-bottom:2px;">${analog.name}</div>
+                <div style="color:#94a3b8; font-size:10px;">${analog.region}, ${analog.country}</div>
+                <div style="color:#cbd5e1; margin-top:4px;">${analog.terrainType} • ${analog.tempMeanC}°C</div>
+                <div style="margin-top:6px; color:#38bdf8; font-size:10px;">Click pin to set active target</div>
+              </div>
+            `);
+
+          marker.on('click', () => {
+            onSelectAnalog(analog);
+          });
+
+          if (isSelected) {
+            marker.openPopup();
+          }
+
+          markersRef.current[analog.id] = marker;
+        });
+
+        // Custom Pin marker if active
+        if (customPin) {
+          const customIcon = L.divIcon({
+            className: 'custom-earth-marker',
+            html: `
+              <div style="position:relative; width:24px; height:24px; display:flex; align-items:center; justify-content:center;">
+                <div style="position:absolute; width:100%; height:100%; border-radius:50%; background:#c084fc; opacity:0.5;"></div>
+                <div style="width:16px; height:16px; border-radius:50%; background:#a855f7; border:2px solid white; box-shadow:0 0 12px #a855f7;"></div>
+              </div>
+            `,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+          const customMarker = L.marker([customPin.lat, customPin.lng], { icon: customIcon })
+            .addTo(map)
+            .bindPopup(`
+              <div style="font-family:'JetBrains Mono',monospace; font-size:11px;">
+                <div style="font-weight:bold; color:#c084fc;">Custom Terrestrial Probe</div>
+                <div style="color:#e2e8f0; font-size:10px; margin-top:2px;">Lat: ${customPin.lat.toFixed(2)}°, Lng: ${customPin.lng.toFixed(2)}°</div>
+                ${customPin.sim ? `<div style="color:#38bdf8; font-weight:bold; margin-top:4px;">Match: ${customPin.sim.overallScore}%</div>` : '<div style="color:#94a3b8;">Analyzing telemetry...</div>'}
+              </div>
+            `)
+            .openPopup();
+          markersRef.current['__custom'] = customMarker;
+        }
+
+      }, [analogs, selectedAnalogId, customPin]);
+
+      return (
+        <div className="relative w-full rounded-2xl overflow-hidden bg-slate-950/90 border border-cyan-500/20 shadow-2xl">
+          <div ref={mapContainerRef} style={{ height: `${height}px`, width: '100%' }} />
+          <div className="absolute top-4 left-4 z-[1000] pointer-events-none flex items-center gap-2 bg-slate-950/80 backdrop-blur px-3 py-1.5 rounded-xl border border-cyan-500/30">
+            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]" />
+            <span className="text-xs font-mono font-bold tracking-widest text-cyan-400 uppercase">2D GEOSPATIAL RADAR // DARK MATTER</span>
+          </div>
+          <div className="absolute bottom-3 left-3 z-[1000] bg-slate-950/85 backdrop-blur border border-slate-800 px-3 py-1.5 rounded-lg text-[10px] font-mono text-slate-400">
+            <span className="text-cyan-400 font-bold">INTERACTIVE:</span> Click any coordinate to query ad-hoc planetary match
+          </div>
+        </div>
+      );
+    }
+
+    // --- 5. MAIN EARTH-TWIN APPLICATION ---
+    function EarthTwinApp() {
+      const [activePage, setActivePage] = useState('landing');
+      const [selectedPlanetId, setSelectedPlanetId] = useState('mars');
+      const [selectedSiteId, setSelectedSiteId] = useState('mars-jezero');
+      const [selectedAnalogId, setSelectedAnalogId] = useState('atacama-yungay');
+      const [selectedVehicleId, setSelectedVehicleId] = useState('heavy-science-rover');
+      const [comparisonAnalogIds, setComparisonAnalogIds] = useState(['atacama-yungay', 'mcmurdo-dry-valleys', 'devon-island-hmp']);
+      const [liveWeather, setLiveWeather] = useState(null);
+      const [searchQuery, setSearchQuery] = useState('');
+      const [selectedTerrainFilter, setSelectedTerrainFilter] = useState('all');
+      const [earthViewMode, setEarthViewMode] = useState('globe'); // 'globe' | 'map'
+      const [customCoords, setCustomCoords] = useState(null);
+
+      // Modals
+      const [exportModalOpen, setExportModalOpen] = useState(false);
+      const [explanationModalParam, setExplanationModalParam] = useState(null);
+      const [savedMissionsDrawerOpen, setSavedMissionsDrawerOpen] = useState(false);
+      const [tourStep, setTourStep] = useState(null); // Guided tour step index
+
+      // Saved Missions in localStorage
+      const [savedMissions, setSavedMissions] = useState(() => {
+        try {
+          const raw = localStorage.getItem('earthtwin_saved_missions');
+          return raw ? JSON.parse(raw) : [
+            { id: 'pres-1', title: 'Perseverance Delta Rover Traversal', planetId: 'mars', siteId: 'mars-jezero', analogId: 'atacama-yungay', vehicleId: 'heavy-science-rover', date: '2026-11-20', notes: 'Core drilling qualification.' },
+            { id: 'pres-2', title: 'Artemis South Pole Cold Trap Drill', planetId: 'moon', siteId: 'moon-shackleton', analogId: 'mcmurdo-dry-valleys', vehicleId: 'subsurface-drill-rig', date: '2026-11-21', notes: 'Sublimation rate trials.' }
+          ];
+        } catch { return []; }
+      });
+
+      const planet = PLANETARY_BODIES.find(p => p.id === selectedPlanetId) || PLANETARY_BODIES[0];
+      const site = planet.primarySites.find(s => s.id === selectedSiteId) || planet.primarySites[0];
+      const analog = EARTH_ANALOGS.find(a => a.id === selectedAnalogId) || EARTH_ANALOGS[0];
+      const vehicle = EXPLORATION_VEHICLES.find(v => v.id === selectedVehicleId) || EXPLORATION_VEHICLES[0];
+
+      const similarity = calculateSimilarity(site, planet, analog);
+      const simulation = runMissionSimulation(vehicle, site, analog);
+
+      // Open-Meteo Query
+      useEffect(() => {
+        let isMounted = true;
+        const fetchWeather = async () => {
+          try {
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${analog.coordinates.lat}&longitude=${analog.coordinates.lng}&current=temperature_2m,relative_humidity_2m,surface_pressure,wind_speed_10m&wind_speed_unit=kmh`;
+            const res = await fetch(url);
+            if (res.ok) {
+              const data = await res.json();
+              if (isMounted) {
+                setLiveWeather({
+                  temp: data.current.temperature_2m,
+                  wind: data.current.wind_speed_10m,
+                  pressure: data.current.surface_pressure,
+                  humidity: data.current.relative_humidity_2m
+                });
+              }
+            }
+          } catch(e) {
+            if (isMounted) {
+              setLiveWeather({
+                temp: analog.tempMeanC,
+                wind: 15,
+                pressure: analog.surfacePressureMbar,
+                humidity: 12
+              });
+            }
+          }
+        };
+        fetchWeather();
+        return () => { isMounted = false; };
+      }, [analog.id]);
+
+      const handleMapClick = async (lat, lng) => {
+        sfx.playClick();
+        setCustomCoords({ lat, lng, temp: '...', pressure: '...', loading: true });
+        try {
+          const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current=temperature_2m,surface_pressure,relative_humidity_2m`);
+          let temp = 12;
+          let pressure = 1010;
+          if (res.ok) {
+            const d = await res.json();
+            temp = d.current.temperature_2m;
+            pressure = d.current.surface_pressure;
+          }
+          const customAnalog = {
+            id: 'custom-point',
+            name: `Probe [${lat.toFixed(2)}°, ${lng.toFixed(2)}°]`,
+            country: 'Ad-Hoc Coordinate',
+            region: 'Global Terrestrial Grid',
+            coordinates: { lat, lng },
+            elevationMeters: 400,
+            tempMeanC: temp,
+            diurnalSwingC: 14,
+            surfacePressureMbar: pressure,
+            terrainType: 'Geospatial Probe Site',
+            matchingCharacteristics: ['Direct planetary comparison to point on Earth surface'],
+            limitations: ['Real-time interpolated atmospheric model']
+          };
+          const sim = calculateSimilarity(site, planet, customAnalog);
+          setCustomCoords({ lat, lng, temp, pressure, sim, loading: false });
+        } catch(e) {
+          setCustomCoords(prev => ({ ...prev, loading: false }));
+        }
+      };
+
+      const earthPins = EARTH_ANALOGS.map(a => ({
+        id: a.id,
+        name: a.name,
+        lat: a.coordinates.lat,
+        lng: a.coordinates.lng,
+        description: `${a.region}, ${a.country} (${a.terrainType})`
+      }));
+
+      const planetPins = planet.primarySites.map(s => ({
+        id: s.id,
+        name: s.name,
+        lat: s.coordinates.lat,
+        lng: s.coordinates.lng,
+        description: s.geomorphology
+      }));
+
+      const saveCurrentMission = () => {
+        const title = prompt('Enter a mission title:', `${planet.name} ${site.name} vs ${analog.name}`);
+        if (!title) return;
+        const newMission = {
+          id: 'miss-' + Date.now(),
+          title,
+          planetId: planet.id,
+          siteId: site.id,
+          analogId: analog.id,
+          vehicleId: vehicle.id,
+          date: new Date().toISOString().split('T')[0],
+          notes: `PAI Similarity: ${similarity.overallScore}% | Compatibility: ${simulation.compatibilityScore}%`
+        };
+        const updated = [newMission, ...savedMissions];
+        setSavedMissions(updated);
+        try { localStorage.setItem('earthtwin_saved_missions', JSON.stringify(updated)); } catch(e) {}
+        sfx.playLock();
+        alert('Mission successfully saved to EarthTwin archive!');
+      };
+
+      const loadSavedMission = (m) => {
+        sfx.playLock();
+        setSelectedPlanetId(m.planetId);
+        setSelectedSiteId(m.siteId);
+        setSelectedAnalogId(m.analogId);
+        if (m.vehicleId) setSelectedVehicleId(m.vehicleId);
+        setSavedMissionsDrawerOpen(false);
+        setActivePage('mission-control');
+      };
+
+      const deleteSavedMission = (id) => {
+        const updated = savedMissions.filter(m => m.id !== id);
+        setSavedMissions(updated);
+        try { localStorage.setItem('earthtwin_saved_missions', JSON.stringify(updated)); } catch(e) {}
+      };
+
+      // Filtered analogs for Finder
+      const filteredAnalogs = useMemo(() => {
+        return EARTH_ANALOGS.filter(a => {
+          const matchQ = a.name.toLowerCase().includes(searchQuery.toLowerCase()) || a.country.toLowerCase().includes(searchQuery.toLowerCase());
+          const matchT = selectedTerrainFilter === 'all' || a.terrainType === selectedTerrainFilter;
+          return matchQ && matchT;
+        }).map(a => ({
+          analog: a,
+          sim: calculateSimilarity(site, planet, a)
+        })).sort((a, b) => b.sim.overallScore - a.sim.overallScore);
+      }, [searchQuery, selectedTerrainFilter, site, planet]);
+
+      return (
+        <div className="min-h-screen bg-[#030712] text-slate-100 flex flex-col font-sans">
+          {/* Header */}
+          <header className="sticky top-0 z-50 bg-[#070d1e]/90 backdrop-blur-md border-b border-cyan-500/20 shadow-2xl">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+              <button onClick={() => setActivePage('landing')} className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-cyan-400 to-violet-600 p-0.5">
+                  <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center font-mono font-bold text-cyan-400">
+                    ET
+                  </div>
+                </div>
+                <div className="text-left font-mono">
+                  <span className="text-lg font-black tracking-wider text-white">EARTH<span className="text-cyan-400">TWIN</span></span>
+                  <div className="text-[9px] text-slate-400">FIND EARTH. SIMULATE BEYOND.</div>
+                </div>
+              </button>
+
+              <nav className="hidden lg:flex items-center gap-1 text-xs font-mono">
+                {[
+                  { id: 'mission-control', label: 'Mission Control', icon: '📡' },
+                  { id: 'planets', label: 'Planet Explorer', icon: '🪐' },
+                  { id: 'finder', label: 'Analog Finder', icon: '🌍' },
+                  { id: 'comparison', label: 'Comparison Lab', icon: '🔬' },
+                  { id: 'simulator', label: 'Simulator', icon: '🚀' },
+                  { id: 'observatory', label: 'Observatory', icon: '📊' },
+                  { id: 'methodology', label: 'Methodology', icon: '📘' }
+                ].map(nav => (
+                  <button
+                    key={nav.id}
+                    onClick={() => {
+                      sfx.playClick();
+                      setActivePage(nav.id);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      activePage === nav.id ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {nav.icon} {nav.label}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSavedMissionsDrawerOpen(true)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-mono font-semibold bg-violet-950 text-violet-300 border border-violet-500/40 hover:bg-violet-900 transition-all flex items-center gap-1.5"
+                >
+                  <span>🔖</span>
+                  <span>SAVED ({savedMissions.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setExportModalOpen(true)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-500/40 hover:bg-cyan-500 hover:text-slate-950 transition-all"
+                >
+                  📥 EXPORT
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* MAIN VIEWPORT */}
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-8">
+
+            {/* 1. LANDING PAGE */}
+            {activePage === 'landing' && (
+              <div className="space-y-12">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pt-6">
+                  <div className="lg:col-span-7 space-y-6 text-left">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-xs font-mono">
+                      <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                      <span>PLANETARY ANALOG INTELLIGENCE PLATFORM</span>
+                    </div>
+
+                    <h1 className="text-4xl sm:text-6xl font-black font-mono tracking-tight text-white leading-tight">
+                      FIND EARTH. <br />
+                      <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
+                        SIMULATE BEYOND.
+                      </span>
+                    </h1>
+
+                    <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+                      EarthTwin bridges planetary exploration and Earth-based scientific discovery.
+                      Identify locations on Earth sharing environmental characteristics with Mars, the Moon and Venus for preliminary mission qualification.
+                    </p>
+
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      <button
+                        onClick={() => {
+                          sfx.playLock();
+                          setActivePage('mission-control');
+                        }}
+                        className="px-6 py-3 rounded-xl font-mono text-xs font-bold bg-cyan-500 text-slate-950 hover:bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]"
+                      >
+                        LAUNCH MISSION CONTROL →
+                      </button>
+                      <button
+                        onClick={() => {
+                          sfx.playClick();
+                          setActivePage('finder');
+                        }}
+                        className="px-6 py-3 rounded-xl font-mono text-xs font-semibold bg-slate-900 border border-slate-700 text-slate-300 hover:text-white"
+                      >
+                        DISCOVER ANALOGS
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-5">
+                    <Globe3D mode="earth" pins={earthPins} height={420} />
+                  </div>
+                </div>
+
+                {/* Preset Scenarios */}
+                <div className="pt-8 border-t border-slate-800">
+                  <h2 className="text-xl font-mono font-bold text-white mb-4">Guided Mission Presets</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[
+                      { planet: 'mars', site: 'mars-jezero', analog: 'atacama-yungay', vehicle: 'heavy-science-rover', title: 'Mars Perseverance Delta', desc: 'Jezero Crater vs Atacama Desert', match: '91% Match', color: 'text-orange-400' },
+                      { planet: 'moon', site: 'moon-shackleton', analog: 'mcmurdo-dry-valleys', vehicle: 'subsurface-drill-rig', title: 'Artemis Lunar South Pole Drill', desc: 'Shackleton Crater vs McMurdo Valleys', match: '88% Match', color: 'text-cyan-400' },
+                      { planet: 'venus', site: 'venus-atmosphere-cloud-deck', analog: 'danakil-dallol', vehicle: 'coaxial-rotorcraft', title: 'Venus Cloud Deck Platform', desc: '53km Cloud Deck vs Danakil Dallol', match: '84% Match', color: 'text-amber-400' }
+                    ].map((p, idx) => (
+                      <div key={idx} className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 hover:border-cyan-500/40 transition-all flex flex-col justify-between">
+                        <div>
+                          <div className={`text-xs font-mono font-bold ${p.color} mb-1`}>{p.match}</div>
+                          <h3 className="text-base font-mono font-bold text-white">{p.title}</h3>
+                          <p className="text-xs text-slate-400 mt-1">{p.desc}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            sfx.playLock();
+                            setSelectedPlanetId(p.planet);
+                            setSelectedSiteId(p.site);
+                            setSelectedAnalogId(p.analog);
+                            setSelectedVehicleId(p.vehicle);
+                            setActivePage('mission-control');
+                          }}
+                          className="mt-4 w-full py-2 rounded-lg font-mono text-xs font-bold bg-slate-800 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 transition-all"
+                        >
+                          INITIALIZE PRESET →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. MISSION CONTROL */}
+            {activePage === 'mission-control' && (
+              <div className="space-y-8">
+                {/* Target Controls Ribbon with Save Mission Action */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b border-slate-800 gap-4">
+                  <div>
+                    <h1 className="text-2xl font-mono font-black text-white">MISSION CONTROL // TELEMETRY</h1>
+                    <div className="text-xs text-slate-400 font-mono mt-0.5">
+                      Target: <strong className="text-cyan-400">{planet.name} ({site.name})</strong> vs Analog: <strong className="text-emerald-400">{analog.name}</strong>
+                    </div>
+                  </div>
+                  <button
+                    onClick={saveCurrentMission}
+                    className="px-4 py-2 rounded-xl text-xs font-mono font-bold bg-slate-900 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500 hover:text-slate-950 transition-all flex items-center gap-1.5"
+                  >
+                    <span>💾</span>
+                    <span>SAVE MISSION BOOKMARK</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800">
+                    <label className="text-[10px] font-mono text-cyan-400 uppercase block mb-1">PLANETARY TARGET:</label>
+                    <div className="flex gap-2 mb-2">
+                      {PLANETARY_BODIES.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            sfx.playPlanetSwitch();
+                            setSelectedPlanetId(p.id);
+                            setSelectedSiteId(p.primarySites[0].id);
+                          }}
+                          className={`px-3 py-1 rounded text-xs font-mono font-bold ${p.id === planet.id ? 'bg-cyan-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}
+                        >
+                          {p.name.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
+                    <select
+                      value={site.id}
+                      onChange={e => setSelectedSiteId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs font-mono text-white"
+                    >
+                      {planet.primarySites.map(s => <option key={s.id} value={s.id}>{s.name} ({s.tempMeanC}°C, {s.pressureMbar} mbar)</option>)}
+                    </select>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800">
+                    <label className="text-[10px] font-mono text-emerald-400 uppercase block mb-1">CANDIDATE EARTH ANALOG:</label>
+                    <select
+                      value={analog.id}
+                      onChange={e => setSelectedAnalogId(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs font-mono text-white mt-1"
+                    >
+                      {EARTH_ANALOGS.map(a => <option key={a.id} value={a.id}>{a.name} ({a.country}) - {a.terrainType}</option>)}
+                    </select>
+                    {liveWeather && (
+                      <div className="text-[11px] font-mono text-cyan-300 mt-2">
+                        LIVE TELEMETRY: Temp: {liveWeather.temp}°C | Wind: {liveWeather.wind} km/h | Pressure: {liveWeather.pressure} hPa
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3D Globe & Similarity Radar */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                  <div className="lg:col-span-6 space-y-4">
+                    <div className="flex items-center justify-between pb-1">
+                      <div className="text-xs font-mono text-slate-400 uppercase">Terrestrial View Mode:</div>
+                      <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-800 gap-1 text-xs font-mono">
+                        <button
+                          onClick={() => { sfx.playClick(); setEarthViewMode('globe'); }}
+                          className={`px-3 py-1 rounded-lg transition-all ${earthViewMode === 'globe' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+                        >
+                          🌐 3D Sphere
+                        </button>
+                        <button
+                          onClick={() => { sfx.playClick(); setEarthViewMode('map'); }}
+                          className={`px-3 py-1 rounded-lg transition-all ${earthViewMode === 'map' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+                        >
+                          🗺️ 2D Leaflet Map
+                        </button>
+                      </div>
+                    </div>
+
+                    {earthViewMode === 'globe' ? (
+                      <Globe3D mode="earth" pins={earthPins} selectedPinId={analog.id} height={440} />
+                    ) : (
+                      <LeafletMap2D
+                        analogs={EARTH_ANALOGS}
+                        selectedAnalogId={analog.id}
+                        onSelectAnalog={(a) => { setSelectedAnalogId(a.id); sfx.playLock(); }}
+                        onMapClick={handleMapClick}
+                        customPin={customCoords}
+                        height={440}
+                      />
+                    )}
+
+                    {customCoords && (
+                      <div className="p-3 bg-violet-950/40 border border-violet-500/40 rounded-xl font-mono text-xs text-slate-300 flex items-center justify-between shadow-lg">
+                        <div>
+                          <div className="text-violet-400 font-bold">CUSTOM GPS PROBE: {customCoords.lat.toFixed(2)}°, {customCoords.lng.toFixed(2)}°</div>
+                          <div className="text-[10px] text-slate-400">
+                            Temp: {customCoords.temp}°C | Pressure: {customCoords.pressure} mbar
+                          </div>
+                        </div>
+                        {customCoords.sim ? (
+                          <div className="text-right">
+                            <span className="text-base font-black text-cyan-300">{customCoords.sim.overallScore}%</span>
+                            <div className="text-[9px] text-slate-400">vs {site.name}</div>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-400 animate-pulse">Querying Open-Meteo...</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="lg:col-span-6 space-y-4">
+                    <div className="p-6 rounded-2xl bg-slate-900/80 border border-cyan-500/20 shadow-xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <div>
+                          <h3 className="text-xs font-mono font-bold text-cyan-400 uppercase">PLANETARY SIMILARITY INDEX (PAI)</h3>
+                          <div className="text-xs font-mono text-slate-300 mt-0.5">{site.name} vs {analog.name}</div>
+                        </div>
+                        <div className="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-xl border border-cyan-500/30">
+                          <span className="text-[10px] font-mono uppercase text-slate-400">Match:</span>
+                          <span className={`text-2xl font-mono font-black ${similarity.overallScore >= 80 ? 'text-emerald-400' : similarity.overallScore >= 60 ? 'text-cyan-400' : 'text-amber-400'}`}>
+                            {similarity.overallScore}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-[10px] font-mono text-slate-400">CLICK ANY PARAMETER FOR SCIENTIFIC PROVENANCE & FORMULAS:</div>
+                        {similarity.parameterScores.map((p, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              sfx.playClick();
+                              setExplanationModalParam(p.name);
+                            }}
+                            className="w-full text-left p-2 rounded-lg bg-slate-950/60 border border-slate-800 hover:border-cyan-500/50 transition-all"
+                          >
+                            <div className="flex items-center justify-between text-xs font-mono mb-1">
+                              <span className="text-slate-200">{p.name}</span>
+                              <span className="font-bold text-cyan-300">{p.score}% ℹ️</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${p.score >= 70 ? 'bg-emerald-400' : p.score >= 40 ? 'bg-cyan-400' : 'bg-rose-500'}`} style={{ width: `${p.score}%` }} />
+                            </div>
+                            <div className="flex justify-between text-[10px] font-mono text-slate-400 mt-1">
+                              <span>Earth: {p.earthValue}</span>
+                              <span className="text-cyan-300">Target: {p.planetaryValue}</span>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 12-Month Climate Suitability */}
+                <div className="p-6 rounded-2xl bg-slate-900/80 border border-cyan-500/20 shadow-xl space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <div>
+                      <h3 className="text-xs font-mono font-bold text-emerald-400 uppercase">12-MONTH TESTING SUITABILITY CALENDAR</h3>
+                      <div className="text-xs font-mono text-slate-300 mt-0.5">Recommended Field Window: <strong className="text-white">{analog.recommendedTestingMonths}</strong></div>
+                    </div>
+                    <span className="px-2.5 py-1 text-xs font-mono bg-slate-950 text-emerald-300 border border-emerald-500/30 rounded-lg">
+                      {analog.logisticsDifficulty} Logistics
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-12 gap-2 h-32 items-end bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                    {analog.seasonalData.map((m, idx) => (
+                      <div key={idx} className="flex flex-col items-center justify-end h-full">
+                        <span className="text-[9px] font-mono text-slate-500 mb-0.5">{m.suitabilityScore}%</span>
+                        <div className="w-full bg-slate-900 rounded-t h-20 flex items-end">
+                          <div className={`w-full rounded-t ${m.suitabilityScore >= 85 ? 'bg-emerald-400' : m.suitabilityScore >= 60 ? 'bg-cyan-400' : 'bg-rose-500'}`} style={{ height: `${m.suitabilityScore}%` }} />
+                        </div>
+                        <span className="text-[9px] font-mono text-slate-400 mt-1">{m.month}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preliminary Vehicle Simulator */}
+                <div className="p-6 rounded-2xl bg-slate-900/80 border border-violet-500/30 shadow-xl space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                    <div>
+                      <h3 className="text-xs font-mono font-bold text-violet-400 uppercase">PRELIMINARY VEHICLE COMPATIBILITY SIMULATOR</h3>
+                      <div className="text-xs font-mono text-slate-300 mt-0.5">Vehicle: <strong className="text-white">{vehicle.name}</strong> on {analog.name}</div>
+                    </div>
+                    <div className="flex items-center gap-2 bg-slate-950 px-3 py-1 rounded-xl border border-violet-500/30">
+                      <span className="text-[10px] font-mono uppercase text-slate-400">Compatibility:</span>
+                      <span className={`text-2xl font-mono font-black ${simulation.compatibilityScore >= 80 ? 'text-emerald-400' : simulation.compatibilityScore >= 60 ? 'text-amber-400' : 'text-rose-400'}`}>
+                        {simulation.compatibilityScore}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {EXPLORATION_VEHICLES.map(v => (
+                      <button
+                        key={v.id}
+                        onClick={() => {
+                          sfx.playClick();
+                          setSelectedVehicleId(v.id);
+                        }}
+                        className={`p-2.5 rounded-xl text-left border text-xs font-mono transition-all ${v.id === vehicle.id ? 'bg-violet-950/60 border-violet-400 text-white' : 'bg-slate-950 border-slate-800 text-slate-400'}`}
+                      >
+                        <div className="text-[9px] text-violet-400 uppercase">{v.type.split(' ')[0]}</div>
+                        <div className="font-bold truncate mt-0.5">{v.name}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-slate-400 text-[10px] uppercase block">Thermal Stress</span>
+                      <span className={`font-bold mt-1 inline-block uppercase ${simulation.thermalRisk === 'nominal' ? 'text-emerald-400' : simulation.thermalRisk === 'caution' ? 'text-amber-400' : 'text-rose-400'}`}>
+                        {simulation.thermalRisk}
+                      </span>
+                      <div className="text-[10px] text-slate-400 mt-1">{simulation.thermalDetails}</div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-slate-400 text-[10px] uppercase block">Terrain Traction</span>
+                      <span className={`font-bold mt-1 inline-block uppercase ${simulation.terrainTractionRisk === 'nominal' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                        {simulation.terrainTractionRisk}
+                      </span>
+                      <div className="text-[10px] text-slate-400 mt-1">{simulation.tractionDetails}</div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-slate-400 text-[10px] uppercase block">Atmospheric Scaling</span>
+                      <span className="font-bold text-cyan-300 mt-1 inline-block">
+                        {simulation.densityRatio}x Earth Density
+                      </span>
+                      <div className="text-[10px] text-slate-400 mt-1">Lift scaling factor vs Earth 1 bar</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3. PLANET EXPLORER */}
+            {activePage === 'planets' && (
+              <div className="space-y-8">
+                <div className="flex gap-2 border-b border-slate-800 pb-4">
+                  {PLANETARY_BODIES.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        sfx.playPlanetSwitch();
+                        setSelectedPlanetId(p.id);
+                        setSelectedSiteId(p.primarySites[0].id);
+                      }}
+                      className={`px-4 py-2 rounded-xl text-xs font-mono font-bold ${p.id === planet.id ? 'bg-cyan-500 text-slate-950' : 'bg-slate-900 text-slate-400'}`}
+                    >
+                      {p.name.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  <div className="lg:col-span-6 space-y-4">
+                    <Globe3D mode={planet.id} pins={planetPins} selectedPinId={site.id} height={440} />
+                    <div className="grid grid-cols-3 gap-2 text-xs font-mono bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                      <div>Gravity: <strong className="text-cyan-300">{planet.gravityG}g</strong></div>
+                      <div>Radius: <strong className="text-white">{planet.meanRadiusKm} km</strong></div>
+                      <div>Pressure: <strong className="text-amber-300">{planet.atmosphere.surfacePressureMbar} mbar</strong></div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-6 space-y-4">
+                    <h3 className="text-lg font-mono font-bold text-white">{site.name}</h3>
+                    <p className="text-xs text-slate-300 leading-relaxed">{site.description}</p>
+                    <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2 text-xs font-mono">
+                      <div>Geomorphology: <span className="text-slate-300">{site.geomorphology}</span></div>
+                      <div>Dominant Minerals: <span className="text-slate-300">{site.dominantMinerals.join(', ')}</span></div>
+                      <div>Significance: <span className="text-cyan-300">{site.scientificSignificance}</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4. ANALOG FINDER */}
+            {activePage === 'finder' && (
+              <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <input
+                    type="text"
+                    placeholder="Search candidate locations by name, country, terrain..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs font-mono text-white"
+                  />
+                  <select
+                    value={selectedTerrainFilter}
+                    onChange={e => setSelectedTerrainFilter(e.target.value)}
+                    className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white"
+                  >
+                    <option value="all">All Terrains ({EARTH_ANALOGS.length})</option>
+                    <option value="Hyper-Arid Desert">Hyper-Arid Desert</option>
+                    <option value="Polar Desert / Permafrost">Polar Desert / Permafrost</option>
+                    <option value="Impact Crater">Impact Crater</option>
+                    <option value="Basaltic Volcanic Field">Basaltic Volcanic Field</option>
+                    <option value="Acidic Hydrothermal / Saline">Acidic Hydrothermal / Saline</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredAnalogs.map(({ analog: a, sim }, i) => (
+                    <div key={a.id} className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800 hover:border-cyan-500/40 transition-all flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-mono text-slate-500">RANK #{i + 1}</span>
+                          <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-cyan-950 text-cyan-400 border border-cyan-500/40">
+                            {sim.overallScore}% MATCH
+                          </span>
+                        </div>
+                        <h3 className="text-base font-mono font-bold text-white">{a.name}</h3>
+                        <div className="text-xs font-mono text-cyan-400 mt-0.5">{a.country} ({a.terrainType})</div>
+                        <div className="text-xs text-slate-300 mt-2">{a.matchingCharacteristics[0]}</div>
+                      </div>
+                      <div className="mt-4 pt-3 border-t border-slate-800 flex gap-2">
+                        <button
+                          onClick={() => {
+                            sfx.playLock();
+                            setSelectedAnalogId(a.id);
+                            setActivePage('mission-control');
+                          }}
+                          className="w-full py-2 rounded-lg font-mono text-xs font-bold bg-cyan-500 text-slate-950 hover:bg-cyan-400 transition-all"
+                        >
+                          SET ACTIVE TARGET →
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 5. COMPARISON LAB */}
+            {activePage === 'comparison' && (
+              <div className="space-y-6">
+                <h2 className="text-xl font-mono font-bold text-white">Comparison Lab // Multi-Site Benchmark</h2>
+                <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/60">
+                  <table className="w-full text-left text-xs font-mono border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-950 text-slate-400 uppercase">
+                        <th className="p-3">Dimension</th>
+                        {comparisonAnalogIds.map(id => {
+                          const a = EARTH_ANALOGS.find(item => item.id === id);
+                          return <th key={id} className="p-3 text-cyan-400">{a?.name}</th>;
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      <tr>
+                        <td className="p-3 text-slate-400">Terrain</td>
+                        {comparisonAnalogIds.map(id => {
+                          const a = EARTH_ANALOGS.find(item => item.id === id);
+                          return <td key={id} className="p-3">{a?.terrainType}</td>;
+                        })}
+                      </tr>
+                      <tr>
+                        <td className="p-3 text-slate-400">Temperature</td>
+                        {comparisonAnalogIds.map(id => {
+                          const a = EARTH_ANALOGS.find(item => item.id === id);
+                          return <td key={id} className="p-3">{a?.tempMeanC}°C (swing {a?.diurnalSwingC}°C)</td>;
+                        })}
+                      </tr>
+                      <tr>
+                        <td className="p-3 text-slate-400">Pressure</td>
+                        {comparisonAnalogIds.map(id => {
+                          const a = EARTH_ANALOGS.find(item => item.id === id);
+                          return <td key={id} className="p-3">{a?.surfacePressureMbar} mbar</td>;
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 6. SIMULATOR */}
+            {activePage === 'simulator' && (
+              <div className="space-y-6">
+                <div className="p-6 rounded-2xl bg-slate-900/80 border border-violet-500/30 space-y-4">
+                  <h2 className="text-base font-mono font-bold text-violet-300 uppercase">HARDWARE STRESS SIMULATOR</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-slate-400 block text-[10px]">Thermal Status</span>
+                      <span className="font-bold text-emerald-400 mt-1 inline-block">{simulation.thermalRisk.toUpperCase()}</span>
+                      <div className="text-[10px] text-slate-400 mt-1">{simulation.thermalDetails}</div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-slate-400 block text-[10px]">Locomotion Risk</span>
+                      <span className="font-bold text-emerald-400 mt-1 inline-block">{simulation.terrainTractionRisk.toUpperCase()}</span>
+                      <div className="text-[10px] text-slate-400 mt-1">{simulation.tractionDetails}</div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
+                      <span className="text-slate-400 block text-[10px]">Density Scaling</span>
+                      <span className="font-bold text-cyan-300 mt-1 inline-block">{simulation.densityRatio}x Earth</span>
+                      <div className="text-[10px] text-slate-400 mt-1">Target Surface Pressure: {site.pressureMbar} mbar</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 7. OBSERVATORY WITH LAPSE RATE CURVES */}
+            {activePage === 'observatory' && (
+              <div className="space-y-8">
+                <h2 className="text-xl font-mono font-bold text-white">Data Observatory // Physical Telemetry</h2>
+                
+                {/* SVG Temperature Lapse Rate Curve */}
+                <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-sm font-mono font-bold text-cyan-400 uppercase">ATMOSPHERIC TEMPERATURE LAPSE RATE CURVES</h3>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">Altitude (0 to 30 km) vs Temperature (°C)</p>
+                    </div>
+                    <div className="flex gap-4 text-xs font-mono">
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-cyan-400"></span> Earth (Γ ~ 6.5°C/km)</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-orange-400"></span> Mars (Γ ~ 2.5°C/km)</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400"></span> Venus (Γ ~ 7.7°C/km)</span>
+                    </div>
+                  </div>
+
+                  <div className="h-56 w-full flex items-center justify-center bg-slate-950/70 rounded-xl p-4 border border-slate-800">
+                    <svg viewBox="0 0 600 200" className="w-full h-full overflow-visible">
+                      <line x1="50" y1="20" x2="50" y2="170" stroke="#334155" strokeWidth="1" />
+                      <line x1="50" y1="170" x2="570" y2="170" stroke="#334155" strokeWidth="1" />
+                      
+                      <text x="50" y="185" fill="#64748b" fontSize="10" fontFamily="monospace">-150°C</text>
+                      <text x="250" y="185" fill="#64748b" fontSize="10" fontFamily="monospace">0°C</text>
+                      <text x="520" y="185" fill="#64748b" fontSize="10" fontFamily="monospace">+450°C</text>
+
+                      {/* Earth curve */}
+                      <path d="M 260 170 Q 240 120 220 50" fill="none" stroke="#22d3ee" strokeWidth="2.5" />
+                      {/* Mars curve */}
+                      <path d="M 210 170 Q 180 120 150 40" fill="none" stroke="#f97316" strokeWidth="2.5" />
+                      {/* Venus curve */}
+                      <path d="M 520 170 Q 420 110 320 30" fill="none" stroke="#eab308" strokeWidth="2.5" />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400">
+                        <th className="p-2">Target</th>
+                        <th className="p-2">Gravity</th>
+                        <th className="p-2">Radius</th>
+                        <th className="p-2">Pressure</th>
+                        <th className="p-2">Solar Flux</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      <tr>
+                        <td className="p-2 font-bold text-cyan-400">Earth (Baseline)</td>
+                        <td className="p-2">1.00g</td>
+                        <td className="p-2">6,371 km</td>
+                        <td className="p-2">1,013 mbar</td>
+                        <td className="p-2">1,361 W/m²</td>
+                      </tr>
+                      {PLANETARY_BODIES.map(p => (
+                        <tr key={p.id}>
+                          <td className="p-2 font-bold text-white">{p.name}</td>
+                          <td className="p-2">{p.gravityG}g</td>
+                          <td className="p-2">{p.meanRadiusKm} km</td>
+                          <td className="p-2">{p.atmosphere.surfacePressureMbar} mbar</td>
+                          <td className="p-2">{p.primarySites[0].solarIrradianceWm2} W/m²</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 8. METHODOLOGY */}
+            {activePage === 'methodology' && (
+              <div className="space-y-6 max-w-4xl">
+                <h2 className="text-xl font-mono font-bold text-white">Scientific Scoring Methodology (PAI)</h2>
+                <div className="p-4 bg-slate-950 border border-cyan-500/30 rounded-xl font-mono text-xs text-cyan-300 space-y-1">
+                  <div>PAI = ∑ [ w_i × S_i ]</div>
+                  <div>S_i = ( 1 - |x_earth - x_planet| / (|x_earth| + |x_planet| + ε) )^γ_i × 100</div>
+                  <div>S_pressure = max(0, 1 - |log₁₀(P_earth) - log₁₀(P_planet)| / D_max) × 100</div>
+                </div>
+                <div className="p-4 bg-rose-950/20 border border-rose-500/30 rounded-xl text-xs font-mono text-slate-300 space-y-2">
+                  <div className="text-rose-400 font-bold uppercase">Non-Reproducible Terrestrial Limitations:</div>
+                  <div>1. Partial gravity (0.38g / 0.16g) cannot naturally exist on Earth.</div>
+                  <div>2. Galactic cosmic rays are shielded by Earth's magnetosphere.</div>
+                  <div>3. Outdoor field testing occurs in an oxidizing 21% O2 atmosphere at ~1 bar.</div>
+                </div>
+              </div>
+            )}
+          </main>
+
+          {/* Explanation Modal */}
+          {explanationModalParam && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+              <div className="w-full max-w-lg bg-slate-900 border border-cyan-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <h3 className="text-base font-mono font-bold text-cyan-300">{explanationModalParam} Scientific Deep-Dive</h3>
+                  <button onClick={() => setExplanationModalParam(null)} className="text-slate-400 hover:text-white font-mono">✕</button>
+                </div>
+                {SCIENTIFIC_EXPLANATIONS[explanationModalParam] && (
+                  <div className="space-y-3 text-xs font-mono">
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase">Evaluated Metric</span>
+                      <span className="text-white font-bold">{SCIENTIFIC_EXPLANATIONS[explanationModalParam].metric}</span>
+                    </div>
+                    <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg text-cyan-300">
+                      <span className="text-slate-500 block text-[9px] uppercase">Formula</span>
+                      {SCIENTIFIC_EXPLANATIONS[explanationModalParam].formula}
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase">Space Instrument & Sensor Suite</span>
+                      <span className="text-slate-200">{SCIENTIFIC_EXPLANATIONS[explanationModalParam].instrument}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px] uppercase">Engineering / Astrobiological Relevance</span>
+                      <span className="text-slate-300 leading-relaxed">{SCIENTIFIC_EXPLANATIONS[explanationModalParam].relevance}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Saved Missions Drawer / Modal */}
+          {savedMissionsDrawerOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+              <div className="w-full max-w-2xl bg-slate-900 border border-violet-500/40 rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh] space-y-4">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <h3 className="text-base font-mono font-bold text-violet-300 flex items-center gap-2">
+                    <span>🔖</span>
+                    <span>Saved Missions & Analog Bookmarks ({savedMissions.length})</span>
+                  </h3>
+                  <button onClick={() => setSavedMissionsDrawerOpen(false)} className="text-slate-400 hover:text-white font-mono">✕</button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-2.5">
+                  {savedMissions.length === 0 ? (
+                    <div className="text-xs font-mono text-slate-500 text-center py-8">No saved missions yet. Click "Save Mission Bookmark" in Mission Control!</div>
+                  ) : (
+                    savedMissions.map(m => (
+                      <div key={m.id} className="p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-xs font-mono font-bold text-white">{m.title}</div>
+                          <div className="text-[10px] font-mono text-cyan-400 mt-0.5">Target: {m.planetId.toUpperCase()} • Analog: {m.analogId} • Saved: {m.date}</div>
+                          {m.notes && <div className="text-[10px] font-mono text-slate-400 mt-1">{m.notes}</div>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => loadSavedMission(m)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold bg-cyan-500 text-slate-950 hover:bg-cyan-400 transition-all"
+                          >
+                            LOAD
+                          </button>
+                          <button
+                            onClick={() => deleteSavedMission(m.id)}
+                            className="p-1.5 text-slate-500 hover:text-rose-400 text-xs font-mono"
+                            title="Delete"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="pt-2 border-t border-slate-800 flex justify-end">
+                  <button
+                    onClick={() => {
+                      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(savedMissions, null, 2));
+                      const a = document.createElement('a');
+                      a.href = dataStr;
+                      a.download = 'earthtwin_saved_missions.json';
+                      a.click();
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-mono bg-slate-800 text-slate-300 hover:text-white border border-slate-700"
+                  >
+                    Export All Missions (.json)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Export Modal */}
+          {exportModalOpen && (() => {
+            const dossierContent = `================================================================================
+EARTHTWIN PLANETARY ANALOG MISSION DOSSIER
+CONFIDENTIAL - SCIENTIFIC & ENGINEERING ANALOG VALIDATION REPORT
+================================================================================
+Generated: ${similarity.calculatedAt}
+Platform: EarthTwin Planetary Analog Intelligence Platform (v1.0.0)
+Tagline: "Find Earth. Simulate Beyond."
+Mission: "Bridging planetary exploration and Earth-based scientific discovery."
+
+Target Planetary Body: ${planet.name.toUpperCase()} (${site.name})
+Selected Earth Analog: ${analog.name} (${analog.country})
+Terrain: ${analog.terrainType}
+
+OVERALL SIMILARITY SCORE: ${similarity.overallScore}%
+Confidence: 92% (Peer-reviewed planetary datasets)
+
+DETAILED PARAMETER SCORES:
+${similarity.parameterScores.map(p => `  • [${p.score}%] ${p.name}: Earth ${p.earthValue} | Target ${p.planetaryValue}`).join('\n')}
+
+VEHICLE COMPATIBILITY SIMULATION:
+Vehicle: ${vehicle.name} (${vehicle.type})
+Compatibility Score: ${simulation.compatibilityScore}%
+Thermal Risk: ${simulation.thermalRisk.toUpperCase()}
+Locomotion Risk: ${simulation.terrainTractionRisk.toUpperCase()}
+
+RECOMMENDED TESTING WINDOW:
+${analog.recommendedTestingMonths} (${analog.logisticsDifficulty} Logistics)
+================================================================================`;
+
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+                <div className="w-full max-w-2xl bg-slate-900 border border-cyan-500/40 rounded-2xl p-6 shadow-2xl flex flex-col max-h-[80vh]">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 className="text-sm font-mono font-bold text-cyan-300">SCIENTIFIC MISSION DOSSIER</h3>
+                    <button onClick={() => setExportModalOpen(false)} className="text-slate-400 font-mono">✕</button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto my-4 p-3 bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-300 whitespace-pre">
+                    {dossierContent}
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      onClick={() => window.print()}
+                      className="px-4 py-2 rounded-xl text-xs font-mono font-bold bg-slate-800 text-cyan-300 border border-cyan-500/30 hover:bg-slate-700 transition-all flex items-center gap-1.5"
+                    >
+                      <span>🖨️</span>
+                      <span>Print Dossier</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        const element = document.createElement('a');
+                        const file = new Blob([dossierContent], { type: 'text/plain' });
+                        element.href = URL.createObjectURL(file);
+                        element.download = 'EarthTwin_Mission_Dossier.txt';
+                        document.body.appendChild(element);
+                        element.click();
+                        document.body.removeChild(element);
+                      }}
+                      className="px-4 py-2 rounded-xl text-xs font-mono font-bold bg-cyan-500 text-slate-950 hover:bg-cyan-400 transition-all flex items-center gap-1.5"
+                    >
+                      <span>📥</span>
+                      <span>Download .txt Dossier</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      );
+    }
+
+    ReactDOM.render(<EarthTwinApp />, document.getElementById('root'));
+  </script>
+</body>
+</html>
